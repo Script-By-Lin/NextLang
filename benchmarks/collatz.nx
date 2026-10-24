@@ -1,0 +1,14 @@
+# Collatz Sequence Benchmark over 1..50,000
+var total_steps:<INT64> = 0;
+fr<var n:<INT64> = 1: n <= 50000: n++> {
+    var cur:<INT64> = n;
+    As cur > 1 {
+        if cur % 2 == 0 {
+            cur = cur / 2;
+        } else {
+            cur = cur * 3 + 1;
+        }
+        total_steps++;
+    }
+}
+vout("Collatz total steps:", total_steps);

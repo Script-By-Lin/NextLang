@@ -1,0 +1,27 @@
+// NextLang Phase 8 Example: Native Structs & Layout
+
+struct Vector3 {
+    x:<INT32>,
+    y:<INT32>,
+    z:<INT32>
+}
+
+struct Transform {
+    position:<Vector3>,
+    scale:<INT32>
+}
+
+fn main() {
+    var pos:<Vector3> = Vector3 { x: 10, y: 20, z: 30 };
+    vout("=== NextLang Systems: Native Structs ===");
+    vout("Position:", pos.x, pos.y, pos.z);
+
+    var len_sq:<INT32> = pos.x * pos.x + pos.y * pos.y + pos.z * pos.z;
+    vout("Length squared:", len_sq);
+
+    var tf:<Transform> = Transform {
+        position: pos,
+        scale: 2
+    };
+    vout("Transform scale:", tf.scale);
+}

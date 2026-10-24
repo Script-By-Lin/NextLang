@@ -1,0 +1,25 @@
+// NextLang Phase 5: Ownership, Lifetimes, Borrowing & Manual Memory Management
+
+// 1. Primitive types follow Copy semantics
+var num1:<INT32> = 42;
+var num2:<INT32> = num1; // num1 copied, remains usable
+vout("Primitives copy:", num1, num2);
+
+// 2. References and Borrowing
+var message:<STRING> = "NextLang Safety";
+var ref_msg:<&STRING> = &message; // immutable borrow
+vout("Borrowed message:", ref_msg);
+
+// 3. Scoped temporary variables with 'tem'
+{
+    tem scoped_counter:<INT32> = 100;
+    vout("Scoped temporary:", scoped_counter);
+    // scoped_counter is dropped at the end of this block
+}
+
+// 4. Safe Manual Heap Allocation and Deallocation
+var heap_val:<STRING> = alloc("Explicit Heap Allocated Buffer");
+vout("Heap allocated:", heap_val);
+
+free(heap_val);
+vout("Successfully freed heap value!");

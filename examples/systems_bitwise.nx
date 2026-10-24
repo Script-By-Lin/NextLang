@@ -1,0 +1,22 @@
+// NextLang Phase 8 Example: Low-Level Bitwise Operations
+
+fn main() {
+    var a:<INT32> = 12; // Binary: 0000 1100
+    var b:<INT32> = 5;  // Binary: 0000 0101
+
+    var and_val:<INT32> = a & b;   // Binary: 0000 0100 (4)
+    var or_val:<INT32> = a | b;    // Binary: 0000 1101 (13)
+    var xor_val:<INT32> = a ^ b;   // Binary: 0000 1001 (9)
+    var shl_val:<INT32> = a << 2;  // Binary: 0011 0000 (48)
+    var shr_val:<INT32> = a >> 1;  // Binary: 0000 0110 (6)
+    var not_val:<INT32> = ~a;      // -13
+
+    vout("=== NextLang Systems: Bitwise Operations ===");
+    vout("a =", a, ", b =", b);
+    vout("a & b   =", and_val);
+    vout("a | b   =", or_val);
+    vout("a ^ b   =", xor_val);
+    vout("a << 2  =", shl_val);
+    vout("a >> 1  =", shr_val);
+    vout("~a      =", not_val);
+}

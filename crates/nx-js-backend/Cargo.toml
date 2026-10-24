@@ -1,0 +1,15 @@
+[package]
+name = "nx-js-backend"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+nx-diagnostics = { path = "../nx-diagnostics" }
+nx-ast = { path = "../nx-ast" }
+nx-parser = { path = "../nx-parser" }
+nx-analyzer = { path = "../nx-analyzer" }
+
+[dev-dependencies]
+nx-runtime = { path = "../nx-runtime" }

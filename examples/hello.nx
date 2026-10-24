@@ -1,0 +1,30 @@
+const PI:<FL64> = 3.14159;
+
+var age:<INT32> = 25;
+var name:<STRING> = "Alex";
+var active:<BOOL> = true;
+
+vout("Hello", name);
+
+if age >= 18 & active {
+    vout("Adult");
+} otherwise age < 18 | not active {
+    vout("Minor or inactive");
+} else {
+    vout("Other");
+}
+
+tem i:<INT32> = 0;
+
+As i < 3 {
+    vout(i);
+    i++;
+}
+
+fr<tem j:<INT32> = 0: j < 3: j++> {
+    vout(j);
+}
+
+Do {
+    i--;
+} As i > 0;

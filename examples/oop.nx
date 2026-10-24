@@ -1,0 +1,79 @@
+// NextLang Phase 3: Object-Oriented Programming (OOP) Example
+
+interface Describable {
+    fn describe():<STRING>;
+}
+
+abstract class Shape implements Describable {
+    protected var name:<STRING> = "Shape";
+
+    public fn init(shape_name:<STRING>):<VOID> {
+        self.name = shape_name;
+        return;
+    }
+
+    public abstract fn area():<FL64>;
+
+    public fn describe():<STRING> {
+        return self.name;
+    }
+}
+
+class Rectangle extends Shape {
+    protected var width:<FL64> = 0.0;
+    protected var height:<FL64> = 0.0;
+
+    public fn init(w:<FL64>, h:<FL64>):<VOID> {
+        self.name = "Rectangle";
+        self.width = w;
+        self.height = h;
+        return;
+    }
+
+    public fn area():<FL64> {
+        return self.width * self.height;
+    }
+
+    public fn get_width():<FL64> {
+        return self.width;
+    }
+
+    public fn get_height():<FL64> {
+        return self.height;
+    }
+}
+
+class Square extends Rectangle {
+    public fn init(side:<FL64>):<VOID> {
+        self.name = "Square";
+        self.width = side;
+        self.height = side;
+        return;
+    }
+
+    public fn describe():<STRING> {
+        return super.describe() + " (regular polygon)";
+    }
+}
+
+class ShapeFactory {
+    public static var default_scale:<FL64> = 1.0;
+
+    public static fn create_square(side:<FL64>):<Square> {
+        return Square(side);
+    }
+}
+
+// Concrete instantiation
+var rect:<Rectangle> = Rectangle(4.0, 5.0);
+var rect_area:<FL64> = rect.area();
+vout("Rectangle area:", rect_area);
+
+// Polymorphic assignment (Subtype to Base Shape)
+var shape:<Shape> = rect;
+vout("Shape description:", shape.describe());
+
+// Static helper invocation
+var sq:<Square> = ShapeFactory.create_square(3.0);
+vout("Square description:", sq.describe());
+vout("Square area:", sq.area());

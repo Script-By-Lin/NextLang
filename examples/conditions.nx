@@ -1,0 +1,45 @@
+# NextLang - Conditionals and Logical Operators
+
+var score:<INT32> = 85;
+var has_attendance:<BOOL> = true;
+
+# 1. Multiple 'otherwise' branches with 'else' fallback
+if score >= 90 & has_attendance {
+    vout("Grade: A with honors");
+} otherwise score >= 80 & has_attendance {
+    vout("Grade: B");
+} otherwise score >= 70 {
+    vout("Grade: C");
+} otherwise score >= 60 {
+    vout("Grade: D");
+} else {
+    vout("Grade: F");
+}
+
+# 2. Logical OR (|) and Logical NOT (not)
+var is_weekend:<BOOL> = false;
+var is_holiday:<BOOL> = true;
+
+if is_weekend | is_holiday {
+    vout("Time to relax!");
+}
+
+if not is_weekend & not is_holiday {
+    vout("A regular working day.");
+}
+
+# 3. Functions with conditional branches
+fn classify_age(age:<INT32>):<STRING> {
+    if age >= 65 {
+        return "Senior";
+    } otherwise age >= 18 {
+        return "Adult";
+    } otherwise age >= 13 {
+        return "Teenager";
+    } else {
+        return "Child";
+    }
+}
+
+var status:<STRING> = classify_age(21);
+vout("Classification:", status);

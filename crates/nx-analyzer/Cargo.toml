@@ -1,0 +1,11 @@
+[package]
+name = "nx-analyzer"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+nx-diagnostics = { path = "../nx-diagnostics" }
+nx-ast = { path = "../nx-ast" }
+nx-parser = { path = "../nx-parser" }

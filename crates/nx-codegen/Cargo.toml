@@ -1,0 +1,21 @@
+[package]
+name = "nx-codegen"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+nx-ast = { path = "../nx-ast" }
+nx-diagnostics = { path = "../nx-diagnostics" }
+nx-analyzer = { path = "../nx-analyzer" }
+nx-parser = { path = "../nx-parser" }
+nx-nir = { path = "../nx-nir" }
+nx-native-runtime = { path = "../nx-native-runtime" }
+
+cranelift-codegen = "0.137.0"
+cranelift-frontend = "0.137.0"
+cranelift-module = "0.137.0"
+cranelift-object = "0.137.0"
+target-lexicon = "0.13"
+
+[dev-dependencies]
+nx-runtime = { path = "../nx-runtime" }

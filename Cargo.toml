@@ -1,0 +1,22 @@
+[workspace]
+members = [
+    "crates/nx-diagnostics",
+    "crates/nx-ast",
+    "crates/nx-lexer",
+    "crates/nx-parser",
+    "crates/nx-analyzer",
+    "crates/nx-runtime",
+    "crates/nx-js-backend",
+    "crates/nx-native-runtime",
+    "crates/nx-nir",
+    "crates/nx-codegen",
+    "crates/nx-cli",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["NextLang Team"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/nextlang/nextlang"

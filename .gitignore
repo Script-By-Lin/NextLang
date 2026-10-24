@@ -1,0 +1,6 @@
+/target
+/.nx_cache
+/test_proj
+phrase*.md
+Phrase*.md
+p1_*.md

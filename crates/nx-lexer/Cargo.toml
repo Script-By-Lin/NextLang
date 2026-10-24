@@ -1,0 +1,9 @@
+[package]
+name = "nx-lexer"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+nx-diagnostics = { path = "../nx-diagnostics" }

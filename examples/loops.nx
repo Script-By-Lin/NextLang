@@ -1,0 +1,29 @@
+# NextLang - Loop Constructs: As, fr<...>, and Do ... As
+
+# 1. While Loop using keyword 'As'
+tem count:<INT32> = 0;
+As count < 5 {
+    vout("As loop count:", count);
+    count++;
+}
+
+# 2. For Loop using 'fr<init : cond : update>'
+fr<tem i:<INT32> = 0: i < 5: i++> {
+    vout("fr loop iteration:", i);
+}
+
+# Nested fr loop
+fr<tem row:<INT32> = 0: row < 3: row++> {
+    fr<tem col:<INT32> = 0: col < 3: col++> {
+        vout("Cell:", row, col);
+    }
+}
+
+# 3. Do-While Loop using 'Do { ... } As <cond>;'
+tem countdown:<INT32> = 5;
+Do {
+    vout("Countdown:", countdown);
+    countdown--;
+} As countdown > 0;
+
+vout("All loops completed!");

@@ -1,0 +1,34 @@
+var student_name:<STRING> = "Lynn Lynn Aung";
+var age:<INT8> = 30;
+
+class Exam {
+    public var myanmar_mark:<FL64> = 99.0;
+    public var english_mark:<FL64> = 78.0;
+    public var math_mark:<FL64> = 55.0;
+
+    public fn init(myanmar:<FL64>, english:<FL64>, math:<FL64>):<VOID> {
+        self.myanmar_mark = myanmar;
+        self.english_mark = english;
+        self.math_mark = math;
+        return;
+    }
+
+    public fn total_mark():<FL64> {
+        return self.myanmar_mark + self.english_mark + self.math_mark;
+    }
+
+    public fn average_mark():<FL64> {
+        return self.total_mark() / 3.0;
+    }
+
+    public fn pass():<BOOL> {
+        return self.average_mark() >= 40.0;
+    }
+}
+
+var exam:<Exam> = Exam(99.0, 78.0, 55.0);
+vout("Total mark:", exam.total_mark());
+vout("Average mark:", exam.average_mark());
+vout("Pass:", exam.pass());
+var pid:<INT32> = get_pid();
+vout("PID:", pid);

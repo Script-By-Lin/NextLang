@@ -1,0 +1,48 @@
+// NextLang Phase 5: Pattern Matching with match ... case
+
+fn describe_code(status:<INT32>):<STRING> {
+    match status {
+        case 200 {
+            return "OK";
+        }
+        case 201 | 202 {
+            return "Accepted or Created";
+        }
+        case code if code >= 400 & code < 500 {
+            return "Client Error";
+        }
+        case code if code >= 500 {
+            return "Server Error";
+        }
+        case _ {
+            return "Unknown Status";
+        }
+    }
+    return "None";
+}
+
+fn describe_user(role:<STRING>):<STRING> {
+    match role {
+        case "admin" {
+            return "Full Access";
+        }
+        case "editor" | "contributor" {
+            return "Write Access";
+        }
+        case "guest" {
+            return "Read-only Access";
+        }
+        case _ {
+            return "No Access";
+        }
+    }
+    return "None";
+}
+
+vout("Status 200:", describe_code(200));
+vout("Status 202:", describe_code(202));
+vout("Status 404:", describe_code(404));
+vout("Status 503:", describe_code(503));
+vout("Role admin:", describe_user("admin"));
+vout("Role editor:", describe_user("editor"));
+vout("Role guest:", describe_user("guest"));

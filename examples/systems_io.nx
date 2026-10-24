@@ -1,0 +1,46 @@
+// NextLang Phase 8 Example: Systems Primitives (Files, Environment, Buffers)
+
+fn main() {
+    vout("=== NextLang Systems: OS & I/O Primitives ===");
+
+    // 1. Process and Environment
+    var pid:<INT32> = get_pid();
+    vout("Current Process ID:", pid);
+
+    var cwd:<STRING> = get_cwd();
+    vout("Current Working Directory:", cwd);
+
+    env_set("NEXTLANG_DEMO", "LLVM_POWERED");
+    var env_val:<STRING> = env_get("NEXTLANG_DEMO");
+    vout("Environment variable NEXTLANG_DEMO:", env_val);
+
+    // 2. File I/O
+    var file_path:<STRING> = "/tmp/nextlang_phase8_demo.txt";
+    var msg:<STRING> = "Systems programming in NextLang compiled natively with LLVM!";
+    file_write(file_path, msg);
+
+    if file_exists(file_path) {
+        var content:<STRING> = file_read_all(file_path);
+        vout("File content read back:", content);
+        file_remove(file_path);
+        vout("File cleanup verified.");
+    }
+
+    // 3. Byte Buffers
+    var buf:<PTR> = buffer_new(32);
+    var sz:<UINT64> = buffer_size(buf);
+    vout("Allocated byte buffer size:", sz);
+
+    buffer_set_u8(buf, 0, 0x4E); // 'N'
+    buffer_set_u8(buf, 1, 0x58); // 'X'
+    var c0:<UINT8> = buffer_get_u8(buf, 0);
+    var c1:<UINT8> = buffer_get_u8(buf, 1);
+    vout("Buffer magic bytes:", c0, c1);
+
+    buffer_set_u32_le(buf, 4, 0xCAFEBABE);
+    var magic:<UINT32> = buffer_get_u32_le(buf, 4);
+    vout("Buffer 32-bit LE word:", magic);
+
+    buffer_free(buf);
+    vout("Byte buffer deallocated successfully.");
+}

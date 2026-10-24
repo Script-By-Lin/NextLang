@@ -1,0 +1,18 @@
+// NextLang Phase 8 Example: Native FFI & Unsafe Blocks
+
+extern "C" {
+    fn abs(n:<INT32>):<INT32>;
+    fn puts(str:<STRING>):<INT32>;
+}
+
+fn main() {
+    vout("=== NextLang Systems: Native FFI & Unsafe ===");
+
+    unsafe {
+        var negative:<INT32> = -100;
+        var positive:<INT32> = abs(negative);
+        vout("abs(-100) =", positive);
+
+        puts("Hello from C runtime standard library!");
+    }
+}

@@ -1,0 +1,56 @@
+# NextLang - Variable and Type System Examples
+
+# 1. Mutable variables (var)
+var age:<INT32> = 30;
+age = 31;
+age += 5;
+age++;
+
+# 2. Constants (const)
+const PI:<FL64> = 3.1415926535;
+const APP_NAME:<STRING> = "NextLang";
+
+# 3. Temporary local variables (tem)
+tem temp_count:<INT32> = 0;
+temp_count++;
+
+# 4. Primitive Types
+var s8:<INT8> = 127;
+var s16:<INT16> = 32767;
+var s32:<INT32> = 2147483647;
+var s64:<INT64> = 9223372036854775807;
+
+var u8:<UINT8> = 255;
+var u16:<UINT16> = 65535;
+var u32:<UINT32> = 4294967295;
+var u64:<UINT64> = 18446744073709551615;
+
+var f32:<FL32> = 3.14;
+var f64:<FL64> = 2.718281828459045;
+var f128:<FL128> = 1.414213562373095048801688724;
+
+var is_active:<BOOL> = true;
+var grade:<CHAR> = 'A';
+var message:<STRING> = "Hello, NextLang!";
+var dynamic_val:<ANY> = 42;
+
+# 5. Generic Collections
+var scores:<LIST<INT32>> = [95, 88, 72, 100];
+var tags:<SET<STRING>> = ["rust", "nextlang", "fast"];
+var user_ages:<MAP<STRING, INT32>> = {
+    "Alice": 25,
+    "Bob": 30
+};
+var mixed_list:<LIST<ANY>> = [1, "two", true];
+
+# 6. Nested Collections
+var matrix:<LIST<LIST<INT32>>> = [
+    [1, 2, 3],
+    [4, 5, 6]
+];
+
+# 7. Union Types
+var number_or_float:<INT32 | FL64> = 42;
+var hybrid_list:<LIST<INT32 | FL64>> = [1, 2.5, 3];
+
+vout("All variables defined successfully!");

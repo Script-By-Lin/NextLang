@@ -1,0 +1,12 @@
+[package]
+name = "nx-nir"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+nx-ast = { path = "../nx-ast" }
+nx-diagnostics = { path = "../nx-diagnostics" }
+nx-analyzer = { path = "../nx-analyzer" }
+
+[dev-dependencies]
+nx-parser = { path = "../nx-parser" }

@@ -1,0 +1,22 @@
+[package]
+name = "nx-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "nx"
+path = "src/main.rs"
+
+[dependencies]
+nx-diagnostics = { path = "../nx-diagnostics" }
+nx-ast = { path = "../nx-ast" }
+nx-lexer = { path = "../nx-lexer" }
+nx-parser = { path = "../nx-parser" }
+nx-analyzer = { path = "../nx-analyzer" }
+nx-runtime = { path = "../nx-runtime" }
+nx-js-backend = { path = "../nx-js-backend" }
+nx-nir = { path = "../nx-nir" }
+nx-codegen = { path = "../nx-codegen" }
+
