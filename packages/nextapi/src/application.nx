@@ -254,13 +254,13 @@ class NextAPI {
             return;
         }
 
-        vout("┌────────────────────────────────────────────────────────────┐");
-        vout("│  NextAPI Server Running                                    │");
-        vout("│  Address: http://" + host + ":" + int_to_str(port) + "                        │");
-        vout("│  Interactive Docs: http://" + host + ":" + int_to_str(port) + self.docs_url + "                  │");
-        vout("│  ReDoc: http://" + host + ":" + int_to_str(port) + self.redoc_url + "                 │");
-        vout("│  OpenAPI JSON: http://" + host + ":" + int_to_str(port) + self.openapi_url + "          │");
-        vout("└────────────────────────────────────────────────────────────┘");
+        vout("+------------------------------------------------------------+");
+        vout("|  NextAPI Server Running                                    |");
+        vout("|  Address: http://" + host + ":" + int_to_str(port) + "                        |");
+        vout("|  Interactive Docs: http://" + host + ":" + int_to_str(port) + self.docs_url + "                  |");
+        vout("|  ReDoc: http://" + host + ":" + int_to_str(port) + self.redoc_url + "                 |");
+        vout("|  OpenAPI JSON: http://" + host + ":" + int_to_str(port) + self.openapi_url + "          |");
+        vout("+------------------------------------------------------------+");
 
         self.lifecycle.trigger_startup();
 
@@ -269,8 +269,20 @@ class NextAPI {
             if client_fd >= 0 {
                 var raw_req: String = await tcp_read(client_fd, 65536);
                 if str_len(raw_req) > 0 {
-                    var raw_res: String = self.handle_raw_http(raw_req);
+                    var req: Request = Request.from_raw(raw_req);
+                    var t0: Int64 = time_now_ms();
+                    var res: Response = self.handle_request(req);
+                    var diff: Int64 = time_now_ms() - t0;
+                    if diff < 0 { diff = 0; }
+                    var raw_res: String = res.to_http_wire();
                     await tcp_write(client_fd, raw_res);
+
+                    var log_prefix: String = "[NextAPI] " + req.method + " " + req.path + " -> " + int_to_str(res.status) + " (" + int_to_str(diff) + "ms)";
+                    if res.status >= 400 {
+                        vout(log_prefix + " [ERROR: " + res.body + "]");
+                    } else {
+                        vout(log_prefix);
+                    }
                 }
                 tcp_close(client_fd);
             }

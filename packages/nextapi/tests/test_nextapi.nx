@@ -106,6 +106,20 @@ test "Milestone D: Automatic OpenAPI 3.0.3 specification generator" {
     assert(str_contains(res.body, "E-Commerce API"), "Must contain application title");
     assert(str_contains(res.body, "/products"), "Must list /products path");
     assert(str_contains(res.body, "/products/{id}"), "Must list /products/{id} path");
+    assert(validate_json(res.body), "OpenAPI JSON must be valid JSON");
+}
+
+test "Milestone D: OpenAPI specification JSON is strictly valid with interleaved methods per path" {
+    var app: NextAPI = NextAPI("Showcase", "1.0", "Desc");
+    app.get("/", "Root", "desc", "tag");
+    app.get("/users", "List", "desc", "tag");
+    app.get("/users/{id}", "Get", "desc", "tag");
+    app.post("/users", "Create", "desc", "tag");
+    app.delete("/users/{id}", "Delete", "desc", "tag");
+    var client: TestClient = TestClient(app);
+    var res: Response = client.get("/openapi.json");
+    assert(res.status == 200, "Must be 200");
+    assert(validate_json(res.body), "OpenAPI JSON with interleaved routes must be valid JSON");
 }
 
 test "Milestone D: Interactive Swagger UI testing interface" {
