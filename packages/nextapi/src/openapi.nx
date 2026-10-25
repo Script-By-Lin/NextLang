@@ -31,14 +31,14 @@ fn generate_openapi_json(title: String, version: String, description: String, ro
     var out: String = "{\"openapi\":\"3.0.3\",\"info\":{\"title\":\"" + title + "\",\"version\":\"" + version + "\",\"description\":\"" + description + "\"},\"paths\":{";
     
     // 1. Collect unique paths preserving registration order
-    var unique_paths: String = "";
+    var unique_paths: String = "|";
     var total_routes: Int32 = router.route_count;
     var i: Int32 = 0;
     As i < total_routes {
         var p: String = router.get_route_path(i);
-        var marker: String = "::" + p + "::";
+        var marker: String = "|" + p + "|";
         if not str_contains(unique_paths, marker) {
-            unique_paths = unique_paths + marker;
+            unique_paths = unique_paths + p + "|";
         }
         i++;
     }
@@ -46,75 +46,70 @@ fn generate_openapi_json(title: String, version: String, description: String, ro
     // 2. Iterate each unique path and aggregate its HTTP methods
     var path_idx: Int32 = 0;
     var u_len: Int64 = str_len(unique_paths);
-    var u_pos: Int64 = 0;
+    var u_pos: Int64 = 1;
     As u_pos < u_len {
-        if str_sub(unique_paths, u_pos, 2) == "::" {
-            var start_p: Int64 = u_pos + 2;
-            var end_p: Int64 = start_p;
-            var found_end: Bool = false;
-            As (end_p <= u_len - 2) & (not found_end) {
-                if str_sub(unique_paths, end_p, 2) == "::" {
-                    found_end = true;
-                } else {
-                    end_p++;
-                }
-            }
-            if found_end {
-                var cur_path: String = str_sub(unique_paths, start_p, end_p - start_p);
-                if path_idx > 0 {
-                    out = out + ",";
-                }
-                out = out + "\"" + cur_path + "\":{";
-
-                // Iterate all routes matching cur_path
-                var method_idx: Int32 = 0;
-                var r: Int32 = 0;
-                As r < total_routes {
-                    var r_p: String = router.get_route_path(r);
-                    if r_p == cur_path {
-                        var m: String = str_lower(router.get_route_method(r));
-                        var sum: String = router.get_route_summary(r);
-                        var desc: String = router.get_route_desc(r);
-                        var tag: String = router.get_route_tag(r);
-
-                        if method_idx > 0 {
-                            out = out + ",";
-                        }
-                        out = out + "\"" + m + "\":{";
-                        out = out + "\"summary\":\"" + sum + "\",";
-                        out = out + "\"description\":\"" + desc + "\",";
-                        out = out + "\"tags\":[\"" + tag + "\"],";
-
-                        var params: String = extract_route_params_json(cur_path);
-                        if str_len(params) > 0 {
-                            out = out + "\"parameters\":[" + params + "],";
-                        }
-
-                        if (m == "post") | (m == "put") | (m == "patch") {
-                            out = out + "\"requestBody\":{\"description\":\"Request payload\",\"required\":true,\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}},";
-                        }
-
-                        out = out + "\"responses\":{";
-                        out = out + "\"200\":{\"description\":\"Successful operation\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}},";
-                        out = out + "\"400\":{\"description\":\"Malformed request syntax or framing error\"},";
-                        out = out + "\"404\":{\"description\":\"Resource not found\"},";
-                        out = out + "\"422\":{\"description\":\"Validation error in request parameters or body\"},";
-                        out = out + "\"500\":{\"description\":\"Internal server error\"}";
-                        out = out + "}}";
-
-                        method_idx++;
-                    }
-                    r++;
-                }
-
-                out = out + "}";
-                path_idx++;
-                u_pos = end_p;
+        var end_p: Int64 = u_pos;
+        var found_end: Bool = false;
+        As (end_p < u_len) & (not found_end) {
+            if str_sub(unique_paths, end_p, 1) == "|" {
+                found_end = true;
             } else {
-                u_pos = u_len;
+                end_p++;
             }
+        }
+        if found_end {
+            var cur_path: String = str_sub(unique_paths, u_pos, end_p - u_pos);
+            if path_idx > 0 {
+                out = out + ",";
+            }
+            out = out + "\"" + cur_path + "\":{";
+
+            // Iterate all routes matching cur_path
+            var method_idx: Int32 = 0;
+            var r: Int32 = 0;
+            As r < total_routes {
+                var r_p: String = router.get_route_path(r);
+                if r_p == cur_path {
+                    var m: String = str_lower(router.get_route_method(r));
+                    var sum: String = router.get_route_summary(r);
+                    var desc: String = router.get_route_desc(r);
+                    var tag: String = router.get_route_tag(r);
+
+                    if method_idx > 0 {
+                        out = out + ",";
+                    }
+                    out = out + "\"" + m + "\":{";
+                    out = out + "\"summary\":\"" + sum + "\",";
+                    out = out + "\"description\":\"" + desc + "\",";
+                    out = out + "\"tags\":[\"" + tag + "\"],";
+
+                    var params: String = extract_route_params_json(cur_path);
+                    if str_len(params) > 0 {
+                        out = out + "\"parameters\":[" + params + "],";
+                    }
+
+                    if (m == "post") | (m == "put") | (m == "patch") {
+                        out = out + "\"requestBody\":{\"description\":\"Request payload\",\"required\":true,\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}},";
+                    }
+
+                    out = out + "\"responses\":{";
+                    out = out + "\"200\":{\"description\":\"Successful operation\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}},";
+                    out = out + "\"400\":{\"description\":\"Malformed request syntax or framing error\"},";
+                    out = out + "\"404\":{\"description\":\"Resource not found\"},";
+                    out = out + "\"422\":{\"description\":\"Validation error in request parameters or body\"},";
+                    out = out + "\"500\":{\"description\":\"Internal server error\"}";
+                    out = out + "}}";
+
+                    method_idx++;
+                }
+                r++;
+            }
+
+            out = out + "}";
+            path_idx++;
+            u_pos = end_p + 1;
         } else {
-            u_pos++;
+            u_pos = u_len;
         }
     }
 
