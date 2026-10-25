@@ -531,3 +531,34 @@ vout("PI is", PI);
     assert!(out.contains("Hello NextLang"));
     assert!(out.contains("PI is 3.14159"));
 }
+
+#[test]
+fn test_runtime_phase11_nextapi_builtins() {
+    let src = r#"
+var parsed: String = http_parse("GET /users/42?page=1 HTTP/1.1\r\nHost: localhost\r\nX-Custom: hello\r\n\r\n");
+vout("http_parse valid:", str_contains(parsed, "\"valid\":true"));
+vout("http_parse method:", str_contains(parsed, "\"method\":\"GET\""));
+vout("http_parse path:", str_contains(parsed, "\"path\":\"/users/42\""));
+vout("http_parse query:", str_contains(parsed, "\"query\":\"page=1\""));
+
+var msg_200: String = http_status_message(200);
+var msg_404: String = http_status_message(404);
+var msg_422: String = http_status_message(422);
+vout("status 200:", msg_200);
+vout("status 404:", msg_404);
+vout("status 422:", msg_422);
+
+var s_int: String = int_to_str(1337);
+vout("int_to_str:", s_int);
+"#;
+    let (res, out) = run_nx(src);
+    assert!(res.is_ok(), "runtime error: {:?}", res.err());
+    assert!(out.contains("http_parse valid: true"));
+    assert!(out.contains("http_parse method: true"));
+    assert!(out.contains("http_parse path: true"));
+    assert!(out.contains("http_parse query: true"));
+    assert!(out.contains("status 200: OK"));
+    assert!(out.contains("status 404: Not Found"));
+    assert!(out.contains("status 422: Unprocessable Entity"));
+    assert!(out.contains("int_to_str: 1337"));
+}

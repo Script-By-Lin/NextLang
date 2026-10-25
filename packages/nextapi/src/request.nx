@@ -1,0 +1,210 @@
+// NextAPI - Request Model
+// Provides HTTP request inspection, path/query extraction, headers, and body access
+
+class Request {
+    public var method: String = "GET";
+    public var path: String = "/";
+    public var query_string: String = "";
+    public var body: String = "";
+    public var client_addr: String = "127.0.0.1";
+    public var headers_raw: String = "{}";
+    public var content_length: Int64 = 0;
+    public var is_valid: Bool = true;
+    public var error_message: String = "";
+    public var path_params: String = "";
+
+    public fn init(m: String, p: String, q: String, b: String, h_raw: String, valid: Bool, err: String) -> Void {
+        self.method = m;
+        self.path = p;
+        self.query_string = q;
+        self.content_length = str_len(b);
+        self.body = b;
+        self.headers_raw = h_raw;
+        self.is_valid = valid;
+        self.error_message = err;
+        self.client_addr = "127.0.0.1";
+        self.path_params = "";
+        return;
+    }
+
+    public fn get_header(name: String) -> String {
+        var lower_key: String = "\"" + str_lower(name) + "\":\"";
+        if not str_contains(self.headers_raw, lower_key) {
+            return "";
+        }
+        var total_len: Int64 = str_len(self.headers_raw);
+        var key_len: Int64 = str_len(lower_key);
+        // Find position of key
+        var i: Int64 = 0;
+        As i <= total_len - key_len {
+            if str_sub(self.headers_raw, i, key_len) == lower_key {
+                var val_start: Int64 = i + key_len;
+                var j: Int64 = val_start;
+                As j < total_len {
+                    if str_sub(self.headers_raw, j, 1) == "\"" {
+                        return str_sub(self.headers_raw, val_start, j - val_start);
+                    }
+                    j++;
+                }
+                return str_sub(self.headers_raw, val_start, total_len - val_start);
+            }
+            i++;
+        }
+        return "";
+    }
+
+    public fn has_header(name: String) -> Bool {
+        var lower_key: String = "\"" + str_lower(name) + "\":";
+        return str_contains(self.headers_raw, lower_key);
+    }
+
+    public fn get_query(name: String, default_val: String) -> String {
+        var qlen: Int64 = str_len(self.query_string);
+        if qlen > 0 {
+            var target: String = name + "=";
+            var tlen: Int64 = str_len(target);
+            var i: Int64 = 0;
+            As i <= qlen - tlen {
+                var prefix_ok: Bool = (i == 0) | (str_sub(self.query_string, i - 1, 1) == "&");
+                if prefix_ok & (str_sub(self.query_string, i, tlen) == target) {
+                    var start_val: Int64 = i + tlen;
+                    var j: Int64 = start_val;
+                    As j < qlen {
+                        if str_sub(self.query_string, j, 1) == "&" {
+                            var raw_val: String = str_sub(self.query_string, start_val, j - start_val);
+                            return url_decode(raw_val);
+                        }
+                        j++;
+                    }
+                    var end_val: String = str_sub(self.query_string, start_val, qlen - start_val);
+                    return url_decode(end_val);
+                }
+                i++;
+            }
+        }
+        return default_val;
+    }
+
+    public fn set_param(name: String, val: String) -> Void {
+        self.path_params = self.path_params + name + "=" + val + "&";
+        return;
+    }
+
+    public fn get_param(name: String) -> String {
+        var plen: Int64 = str_len(self.path_params);
+        if plen == 0 {
+            return "";
+        }
+        var target: String = name + "=";
+        var tlen: Int64 = str_len(target);
+        var i: Int64 = 0;
+        As i <= plen - tlen {
+            var prefix_ok: Bool = (i == 0) | (str_sub(self.path_params, i - 1, 1) == "&");
+            if prefix_ok & (str_sub(self.path_params, i, tlen) == target) {
+                var start_val: Int64 = i + tlen;
+                var j: Int64 = start_val;
+                As j < plen {
+                    if str_sub(self.path_params, j, 1) == "&" {
+                        return str_sub(self.path_params, start_val, j - start_val);
+                    }
+                    j++;
+                }
+                return str_sub(self.path_params, start_val, plen - start_val);
+            }
+            i++;
+        }
+        return "";
+    }
+
+    public fn json() -> String {
+        return self.body;
+    }
+
+    public static fn from_raw(raw_wire: String) -> Request {
+        var parsed: String = http_parse(raw_wire);
+        var is_valid: Bool = str_contains(parsed, "\"valid\":true");
+        if not is_valid {
+            var err: String = extract_json_field(parsed, "error");
+            var bad_req: Request = Request("GET", "/", "", "", "{}", false, err);
+            return bad_req;
+        }
+        var method: String = extract_json_field(parsed, "method");
+        var path: String = extract_json_field(parsed, "path");
+        var query: String = extract_json_field(parsed, "query");
+        var headers: String = extract_json_headers(parsed);
+        var body: String = extract_raw_body(raw_wire);
+        var req: Request = Request(method, path, query, body, headers, true, "");
+        return req;
+    }
+}
+
+fn extract_json_field(json: String, key: String) -> String {
+    var prefix: String = "\"" + key + "\":\"";
+    if not str_contains(json, prefix) {
+        return "";
+    }
+    var jlen: Int64 = str_len(json);
+    var plen: Int64 = str_len(prefix);
+    var i: Int64 = 0;
+    As i <= jlen - plen {
+        if str_sub(json, i, plen) == prefix {
+            var start: Int64 = i + plen;
+            var j: Int64 = start;
+            As j < jlen {
+                if str_sub(json, j, 1) == "\"" {
+                    return str_sub(json, start, j - start);
+                }
+                j++;
+            }
+            return str_sub(json, start, jlen - start);
+        }
+        i++;
+    }
+    return "";
+}
+
+fn extract_json_headers(json: String) -> String {
+    var prefix: String = "\"headers\":{";
+    if not str_contains(json, prefix) {
+        return "{}";
+    }
+    var jlen: Int64 = str_len(json);
+    var plen: Int64 = str_len(prefix);
+    var i: Int64 = 0;
+    As i <= jlen - plen {
+        if str_sub(json, i, plen) == prefix {
+            var start: Int64 = i + plen - 1;
+            var j: Int64 = start;
+            As j < jlen {
+                if str_sub(json, j, 1) == "}" {
+                    return str_sub(json, start, j - start + 1);
+                }
+                j++;
+            }
+            return "{}";
+        }
+        i++;
+    }
+    return "{}";
+}
+
+fn extract_raw_body(raw_wire: String) -> String {
+    var sep: String = "\r\n\r\n";
+    var slen: Int64 = str_len(raw_wire);
+    var i: Int64 = 0;
+    As i <= slen - 4 {
+        if str_sub(raw_wire, i, 4) == sep {
+            return str_sub(raw_wire, i + 4, slen - (i + 4));
+        }
+        i++;
+    }
+    sep = "\n\n";
+    i = 0;
+    As i <= slen - 2 {
+        if str_sub(raw_wire, i, 2) == sep {
+            return str_sub(raw_wire, i + 2, slen - (i + 2));
+        }
+        i++;
+    }
+    return "";
+}

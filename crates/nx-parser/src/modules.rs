@@ -12,6 +12,7 @@ pub const STDLIB_ENCODING: &str = include_str!("../../../stdlib/encoding.nx");
 pub const STDLIB_JSON: &str = include_str!("../../../stdlib/json.nx");
 pub const STDLIB_FS: &str = include_str!("../../../stdlib/fs.nx");
 pub const STDLIB_TESTING: &str = include_str!("../../../stdlib/testing.nx");
+pub const STDLIB_ASYNC: &str = include_str!("../../../stdlib/async.nx");
 
 /// Returns the embedded standard library source code for standard module names.
 pub fn get_stdlib_source(name: &str) -> Option<&'static str> {
@@ -23,6 +24,7 @@ pub fn get_stdlib_source(name: &str) -> Option<&'static str> {
         "json" => Some(STDLIB_JSON),
         "fs" => Some(STDLIB_FS),
         "testing" => Some(STDLIB_TESTING),
+        "async" => Some(STDLIB_ASYNC),
         _ => None,
     }
 }
@@ -109,23 +111,22 @@ impl ModuleResolver {
                         let stdlib_path = PathBuf::from(format!("<stdlib:{}>", path_str));
                         self.resolve_module_internal(&stdlib_path, stdlib_src, diagnostics, false);
                     } else {
-                        // Relative or absolute file path
-                        let mut target_file = parent_dir.join(path_str);
-                        if !target_file.exists() && target_file.extension().is_none() {
-                            target_file.set_extension("nx");
-                        }
-
-                        if !target_file.exists() {
-                            diagnostics.error(
-                                import_stmt.span,
-                                format!(
-                                    "cannot find module '{}' at path '{}'",
-                                    path_str,
-                                    target_file.display()
-                                ),
-                            );
-                            continue;
-                        }
+                        // Relative or absolute file path or package resolution
+                        let resolved = resolve_target_file(parent_dir, path_str);
+                        let target_file = match resolved {
+                            Some(p) => p,
+                            None => {
+                                diagnostics.error(
+                                    import_stmt.span,
+                                    format!(
+                                        "cannot find module '{}' at path '{}'",
+                                        path_str,
+                                        parent_dir.join(path_str).display()
+                                    ),
+                                );
+                                continue;
+                            }
+                        };
 
                         let abs_target = fs::canonicalize(&target_file).unwrap_or(target_file);
 
@@ -167,4 +168,84 @@ impl ModuleResolver {
             self.merged_statements.extend(local_stmts);
         }
     }
+}
+
+/// Resolves an import path to an actual file on disk.
+/// Searches direct files, directory packages (src/lib.nx), parent packages/ directories,
+/// and nextlang.toml dependency path mappings.
+fn resolve_target_file(parent_dir: &Path, path_str: &str) -> Option<PathBuf> {
+    // 1. Direct relative or absolute file path
+    let direct = parent_dir.join(path_str);
+    if direct.is_file() {
+        return Some(direct);
+    }
+    let with_ext = parent_dir.join(format!("{}.nx", path_str));
+    if with_ext.is_file() {
+        return Some(with_ext);
+    }
+
+    // 2. Direct directory package: path_str/src/lib.nx or path_str/lib.nx
+    let dir_lib = parent_dir.join(path_str).join("src").join("lib.nx");
+    if dir_lib.is_file() {
+        return Some(dir_lib);
+    }
+    let dir_lib2 = parent_dir.join(path_str).join("lib.nx");
+    if dir_lib2.is_file() {
+        return Some(dir_lib2);
+    }
+
+    // 3. Search packages/ and nextlang.toml dependencies upwards
+    let mut cur = Some(parent_dir.to_path_buf());
+    while let Some(dir) = cur {
+        // Check nextlang.toml dependencies
+        let manifest_path = dir.join("nextlang.toml");
+        if manifest_path.is_file() {
+            if let Ok(content) = fs::read_to_string(&manifest_path) {
+                for line in content.lines() {
+                    let trimmed = line.trim();
+                    if trimmed.starts_with(path_str) && trimmed.contains("path") {
+                        if let Some(start) = trimmed.find('"') {
+                            if let Some(end) = trimmed[start + 1..].find('"') {
+                                let dep_path = &trimmed[start + 1..start + 1 + end];
+                                let cand = dir.join(dep_path).join("src").join("lib.nx");
+                                if cand.is_file() {
+                                    return Some(cand);
+                                }
+                                let cand2 = dir.join(dep_path).join("lib.nx");
+                                if cand2.is_file() {
+                                    return Some(cand2);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        let pkg_cand = dir
+            .join("packages")
+            .join(path_str)
+            .join("src")
+            .join("lib.nx");
+        if pkg_cand.is_file() {
+            return Some(pkg_cand);
+        }
+        let pkg_cand2 = dir.join("packages").join(path_str).join("lib.nx");
+        if pkg_cand2.is_file() {
+            return Some(pkg_cand2);
+        }
+
+        cur = dir.parent().map(|p| p.to_path_buf());
+    }
+
+    // 4. Current working directory fallback
+    let fallback = Path::new("packages")
+        .join(path_str)
+        .join("src")
+        .join("lib.nx");
+    if fallback.is_file() {
+        return Some(fallback);
+    }
+
+    None
 }

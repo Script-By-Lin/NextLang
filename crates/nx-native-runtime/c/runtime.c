@@ -789,6 +789,28 @@ void nx_rt_async_sleep(int64_t ms) {
 }
 
 int64_t nx_rt_tcp_listen(const char *host, int32_t port) {
+    char host_buf[256] = {0};
+    int actual_port = port;
+    if (host) {
+        const char *colon = strrchr(host, ':');
+        if (colon) {
+            size_t hlen = (size_t)(colon - host);
+            if (hlen < sizeof(host_buf)) {
+                strncpy(host_buf, host, hlen);
+                host_buf[hlen] = '\0';
+            }
+            actual_port = atoi(colon + 1);
+        } else {
+            int p = atoi(host);
+            if (p > 0 && port == 0) {
+                actual_port = p;
+                strcpy(host_buf, "0.0.0.0");
+            } else {
+                strncpy(host_buf, host, sizeof(host_buf) - 1);
+            }
+        }
+    }
+
     int fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0) return -1;
     int opt = 1;
@@ -799,11 +821,11 @@ int64_t nx_rt_tcp_listen(const char *host, int32_t port) {
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
-    addr.sin_port = htons((uint16_t)port);
-    if (!host || strcmp(host, "0.0.0.0") == 0 || strcmp(host, "localhost") == 0) {
+    addr.sin_port = htons((uint16_t)actual_port);
+    if (host_buf[0] == '\0' || strcmp(host_buf, "0.0.0.0") == 0 || strcmp(host_buf, "localhost") == 0) {
         addr.sin_addr.s_addr = INADDR_ANY;
     } else {
-        inet_pton(AF_INET, host, &addr.sin_addr);
+        inet_pton(AF_INET, host_buf, &addr.sin_addr);
     }
 
     if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
@@ -836,6 +858,22 @@ int64_t nx_rt_tcp_accept(int64_t server_fd) {
 }
 
 int64_t nx_rt_tcp_connect(const char *host, int32_t port) {
+    char host_buf[256] = {0};
+    int actual_port = port;
+    if (host) {
+        const char *colon = strrchr(host, ':');
+        if (colon) {
+            size_t hlen = (size_t)(colon - host);
+            if (hlen < sizeof(host_buf)) {
+                strncpy(host_buf, host, hlen);
+                host_buf[hlen] = '\0';
+            }
+            actual_port = atoi(colon + 1);
+        } else {
+            strncpy(host_buf, host, sizeof(host_buf) - 1);
+        }
+    }
+
     int fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0) return -1;
 
@@ -845,8 +883,8 @@ int64_t nx_rt_tcp_connect(const char *host, int32_t port) {
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
-    addr.sin_port = htons((uint16_t)port);
-    const char *target_ip = (host && strcmp(host, "localhost") != 0) ? host : "127.0.0.1";
+    addr.sin_port = htons((uint16_t)actual_port);
+    const char *target_ip = (host_buf[0] && strcmp(host_buf, "localhost") != 0 && strcmp(host_buf, "0.0.0.0") != 0) ? host_buf : "127.0.0.1";
     inet_pton(AF_INET, target_ip, &addr.sin_addr);
 
     int res = connect(fd, (struct sockaddr *)&addr, sizeof(addr));
@@ -963,4 +1001,271 @@ void tcp_close(int64_t fd) { nx_rt_tcp_close(fd); }
 void* task_spawn(void* (*fn)(void*), void *arg) { return nx_rt_task_spawn(fn, arg); }
 void* task_join(void *task) { return nx_rt_task_join(task); }
 int8_t task_cancel(void *task) { return nx_rt_task_cancel(task); }
+
+// Phase 11: HTTP & NextAPI Runtime Primitives
+const char* nx_rt_url_decode(const char *s) {
+    if (!s) return "";
+    size_t len = strlen(s);
+    char *out = (char*)malloc(len + 1);
+    if (!out) nx_rt_panic("out of memory in url_decode");
+    size_t o = 0;
+    for (size_t i = 0; i < len; i++) {
+        if (s[i] == '+') {
+            out[o++] = ' ';
+        } else if (s[i] == '%' && i + 2 < len && isxdigit((unsigned char)s[i+1]) && isxdigit((unsigned char)s[i+2])) {
+            char hex[3] = { s[i+1], s[i+2], '\0' };
+            out[o++] = (char)strtol(hex, NULL, 16);
+            i += 2;
+        } else {
+            out[o++] = s[i];
+        }
+    }
+    out[o] = '\0';
+    return out;
+}
+
+const char* nx_rt_url_encode(const char *s) {
+    if (!s) return "";
+    size_t len = strlen(s);
+    char *out = (char*)malloc(len * 3 + 1);
+    if (!out) nx_rt_panic("out of memory in url_encode");
+    static const char hex_chars[] = "0123456789ABCDEF";
+    size_t o = 0;
+    for (size_t i = 0; i < len; i++) {
+        unsigned char c = (unsigned char)s[i];
+        if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
+            out[o++] = (char)c;
+        } else {
+            out[o++] = '%';
+            out[o++] = hex_chars[c >> 4];
+            out[o++] = hex_chars[c & 0x0F];
+        }
+    }
+    out[o] = '\0';
+    return out;
+}
+
+const char* nx_rt_http_status_message(int32_t code) {
+    switch (code) {
+        case 200: return "OK";
+        case 201: return "Created";
+        case 202: return "Accepted";
+        case 204: return "No Content";
+        case 301: return "Moved Permanently";
+        case 302: return "Found";
+        case 304: return "Not Modified";
+        case 307: return "Temporary Redirect";
+        case 308: return "Permanent Redirect";
+        case 400: return "Bad Request";
+        case 401: return "Unauthorized";
+        case 403: return "Forbidden";
+        case 404: return "Not Found";
+        case 405: return "Method Not Allowed";
+        case 409: return "Conflict";
+        case 413: return "Payload Too Large";
+        case 415: return "Unsupported Media Type";
+        case 422: return "Unprocessable Entity";
+        case 500: return "Internal Server Error";
+        case 501: return "Not Implemented";
+        case 502: return "Bad Gateway";
+        case 503: return "Service Unavailable";
+        default: return "Unknown";
+    }
+}
+
+const char* nx_rt_http_parse(const char *raw) {
+    if (!raw || strlen(raw) == 0) {
+        return "{\"valid\":false,\"method\":\"\",\"path\":\"\",\"query\":\"\",\"headers\":{},\"body\":\"\",\"content_length\":0,\"error\":\"empty request\"}";
+    }
+
+    const char *line_end = strstr(raw, "\r\n");
+    size_t line_end_len = 2;
+    if (!line_end) {
+        line_end = strchr(raw, '\n');
+        line_end_len = 1;
+    }
+    if (!line_end) {
+        return "{\"valid\":false,\"method\":\"\",\"path\":\"\",\"query\":\"\",\"headers\":{},\"body\":\"\",\"content_length\":0,\"error\":\"malformed request: no newline\"}";
+    }
+
+    char line_buf[2048] = {0};
+    size_t line_len = (size_t)(line_end - raw);
+    if (line_len >= sizeof(line_buf)) {
+        return "{\"valid\":false,\"method\":\"\",\"path\":\"\",\"query\":\"\",\"headers\":{},\"body\":\"\",\"content_length\":0,\"error\":\"request line too long\"}";
+    }
+    strncpy(line_buf, raw, line_len);
+    line_buf[line_len] = '\0';
+
+    char method_buf[32] = {0};
+    char uri_buf[2048] = {0};
+    char ver_buf[32] = {0};
+    if (sscanf(line_buf, "%31s %2047s %31s", method_buf, uri_buf, ver_buf) < 2) {
+        return "{\"valid\":false,\"method\":\"\",\"path\":\"\",\"query\":\"\",\"headers\":{},\"body\":\"\",\"content_length\":0,\"error\":\"malformed request line\"}";
+    }
+
+    if (strcmp(method_buf, "GET") != 0 &&
+        strcmp(method_buf, "POST") != 0 &&
+        strcmp(method_buf, "PUT") != 0 &&
+        strcmp(method_buf, "PATCH") != 0 &&
+        strcmp(method_buf, "DELETE") != 0 &&
+        strcmp(method_buf, "HEAD") != 0 &&
+        strcmp(method_buf, "OPTIONS") != 0) {
+        return "{\"valid\":false,\"method\":\"\",\"path\":\"\",\"query\":\"\",\"headers\":{},\"body\":\"\",\"content_length\":0,\"error\":\"unsupported HTTP method\"}";
+    }
+
+    char path_buf[2048] = {0};
+    char query_buf[2048] = {0};
+    char *qmark = strchr(uri_buf, '?');
+    if (qmark) {
+        size_t plen = (size_t)(qmark - uri_buf);
+        if (plen >= sizeof(path_buf)) plen = sizeof(path_buf) - 1;
+        memcpy(path_buf, uri_buf, plen);
+        path_buf[plen] = '\0';
+        snprintf(query_buf, sizeof(query_buf), "%s", qmark + 1);
+    } else {
+        snprintf(path_buf, sizeof(path_buf), "%s", uri_buf);
+    }
+
+    const char *header_start = line_end + line_end_len;
+    const char *body_start = strstr(header_start, "\r\n\r\n");
+    size_t boundary_len = 4;
+    if (!body_start) {
+        body_start = strstr(header_start, "\n\n");
+        boundary_len = 2;
+    }
+    if (!body_start) {
+        body_start = header_start + strlen(header_start);
+        boundary_len = 0;
+    }
+
+    size_t json_cap = 16384 + strlen(raw);
+    char *json = (char*)malloc(json_cap);
+    if (!json) nx_rt_panic("out of memory in http_parse");
+
+    char *h_str = (char*)malloc(header_start < body_start ? (size_t)(body_start - header_start + 1) : 1);
+    if (!h_str) nx_rt_panic("out of memory in http_parse");
+    if (header_start < body_start) {
+        memcpy(h_str, header_start, (size_t)(body_start - header_start));
+        h_str[body_start - header_start] = '\0';
+    } else {
+        h_str[0] = '\0';
+    }
+
+    char headers_json[8192] = "{";
+    size_t hj_len = 1;
+    int first_header = 1;
+    int64_t content_length = 0;
+    int has_transfer_encoding = 0;
+    int content_length_count = 0;
+
+    char *saveptr = NULL;
+    char *h_line = strtok_r(h_str, "\r\n", &saveptr);
+    while (h_line) {
+        char *colon = strchr(h_line, ':');
+        if (colon) {
+            *colon = '\0';
+            char *h_key = h_line;
+            char *h_val = colon + 1;
+            while (*h_key && isspace((unsigned char)*h_key)) h_key++;
+            char *kend = h_key + strlen(h_key);
+            while (kend > h_key && isspace((unsigned char)*(kend - 1))) kend--;
+            *kend = '\0';
+
+            while (*h_val && isspace((unsigned char)*h_val)) h_val++;
+            char *vend = h_val + strlen(h_val);
+            while (vend > h_val && isspace((unsigned char)*(vend - 1))) vend--;
+            *vend = '\0';
+
+            for (char *c = h_key; *c; c++) *c = (char)tolower((unsigned char)*c);
+
+            if (strcmp(h_key, "content-length") == 0) {
+                content_length_count++;
+                content_length = atoll(h_val);
+                if (content_length_count > 1) {
+                    free(h_str);
+                    free(json);
+                    return "{\"valid\":false,\"method\":\"\",\"path\":\"\",\"query\":\"\",\"headers\":{},\"body\":\"\",\"content_length\":0,\"error\":\"request smuggling risk: multiple Content-Length headers\"}";
+                }
+            } else if (strcmp(h_key, "transfer-encoding") == 0) {
+                has_transfer_encoding = 1;
+            }
+
+            if (!first_header) {
+                if (hj_len + 1 < sizeof(headers_json)) headers_json[hj_len++] = ',';
+            }
+            first_header = 0;
+
+            int written = snprintf(headers_json + hj_len, sizeof(headers_json) - hj_len, "\"%s\":\"", h_key);
+            if (written > 0) hj_len += (size_t)written;
+            for (char *v = h_val; *v && hj_len + 4 < sizeof(headers_json); v++) {
+                if (*v == '"' || *v == '\\') {
+                    headers_json[hj_len++] = '\\';
+                }
+                headers_json[hj_len++] = *v;
+            }
+            if (hj_len + 1 < sizeof(headers_json)) headers_json[hj_len++] = '"';
+        }
+        h_line = strtok_r(NULL, "\r\n", &saveptr);
+    }
+    free(h_str);
+
+    if (hj_len + 1 < sizeof(headers_json)) headers_json[hj_len++] = '}';
+    headers_json[hj_len] = '\0';
+
+    if (content_length_count > 0 && has_transfer_encoding) {
+        free(json);
+        return "{\"valid\":false,\"method\":\"\",\"path\":\"\",\"query\":\"\",\"headers\":{},\"body\":\"\",\"content_length\":0,\"error\":\"request smuggling risk: both Content-Length and Transfer-Encoding present\"}";
+    }
+
+    const char *raw_body = boundary_len > 0 ? (body_start + boundary_len) : "";
+    size_t actual_body_len = strlen(raw_body);
+    if (content_length > 0 && (size_t)content_length < actual_body_len) {
+        actual_body_len = (size_t)content_length;
+    }
+
+    char *escaped_body = (char*)malloc(actual_body_len * 2 + 1);
+    if (!escaped_body) nx_rt_panic("out of memory in http_parse");
+    size_t eb_len = 0;
+    for (size_t i = 0; i < actual_body_len; i++) {
+        char c = raw_body[i];
+        if (c == '"' || c == '\\') {
+            escaped_body[eb_len++] = '\\';
+            escaped_body[eb_len++] = c;
+        } else if (c == '\n') {
+            escaped_body[eb_len++] = '\\';
+            escaped_body[eb_len++] = 'n';
+        } else if (c == '\r') {
+            escaped_body[eb_len++] = '\\';
+            escaped_body[eb_len++] = 'r';
+        } else if (c == '\t') {
+            escaped_body[eb_len++] = '\\';
+            escaped_body[eb_len++] = 't';
+        } else if ((unsigned char)c < 32) {
+            eb_len += (size_t)snprintf(escaped_body + eb_len, 7, "\\u%04x", (unsigned char)c);
+        } else {
+            escaped_body[eb_len++] = c;
+        }
+    }
+    escaped_body[eb_len] = '\0';
+
+    snprintf(json, json_cap,
+        "{\"valid\":true,\"method\":\"%s\",\"path\":\"%s\",\"query\":\"%s\",\"headers\":%s,\"body\":\"%s\",\"content_length\":%lld,\"error\":\"\"}",
+        method_buf, path_buf, query_buf, headers_json, escaped_body, (long long)actual_body_len);
+
+    free(escaped_body);
+    return json;
+}
+
+const char* http_parse(const char *raw) { return nx_rt_http_parse(raw); }
+const char* url_decode(const char *s) { return nx_rt_url_decode(s); }
+const char* url_encode(const char *s) { return nx_rt_url_encode(s); }
+const char* http_status_message(int32_t code) { return nx_rt_http_status_message(code); }
+
+const char* nx_rt_int_to_str(int64_t v) {
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%lld", (long long)v);
+    return strdup(buf);
+}
+const char* int_to_str(int64_t v) { return nx_rt_int_to_str(v); }
+
 

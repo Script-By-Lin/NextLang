@@ -1,0 +1,75 @@
+// NextAPI - Middleware System
+// Composable pre-request and post-request pipeline: body limits, timing, request IDs, CORS, and logging
+
+class MiddlewareConfig {
+    public var max_body_size: Int64 = 1048576; // 1 MB
+    public var enable_cors: Bool = true;
+    public var enable_security_headers: Bool = true;
+    public var enable_request_logging: Bool = true;
+    public var cors: CorsConfig = CorsConfig("*", "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD", "Content-Type, Authorization, X-Requested-With, X-Request-ID", false);
+    public var request_counter: Int64 = 1000;
+
+    public fn init(max_body: Int64, enable_cors: Bool, enable_sec: Bool, enable_log: Bool) -> Void {
+        self.max_body_size = max_body;
+        self.enable_cors = enable_cors;
+        self.enable_security_headers = enable_sec;
+        self.enable_request_logging = enable_log;
+        self.cors = CorsConfig("*", "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD", "Content-Type, Authorization, X-Requested-With, X-Request-ID", false);
+        self.request_counter = 1000;
+        return;
+    }
+
+    public static fn default_config() -> MiddlewareConfig {
+        var cfg: MiddlewareConfig = MiddlewareConfig(1048576, true, true, true);
+        return cfg;
+    }
+}
+
+fn process_pre_request(req: Request, cfg: MiddlewareConfig) -> Response {
+    if not req.is_valid {
+        return handle_400(req.error_message);
+    }
+    if (req.content_length > cfg.max_body_size) | (str_len(req.body) > cfg.max_body_size) {
+        return handle_413();
+    }
+    if (req.method == "POST") | (req.method == "PUT") | (req.method == "PATCH") {
+        if str_len(req.body) > 0 {
+            var ct: String = req.get_header("content-type");
+            if str_contains(ct, "application/json") | (str_sub(str_trim(req.body), 0, 1) == "{") | (str_sub(str_trim(req.body), 0, 1) == "[") {
+                if not validate_json(req.body) {
+                    return handle_400("Malformed JSON payload: invalid syntax or unclosed structure");
+                }
+            }
+        }
+    }
+    if (req.method == "OPTIONS") & cfg.enable_cors {
+        return handle_options_preflight(cfg.cors);
+    }
+    // Return status 0 response indicating continuation
+    var cont: Response = Response(0, "", "");
+    return cont;
+}
+
+fn process_post_request(req: Request, res: Response, cfg: MiddlewareConfig, start_time_ms: Int64) -> Response {
+    var elapsed: Int64 = time_now_ms() - start_time_ms;
+    if elapsed < 0 {
+        elapsed = 0;
+    }
+    res.set_header("X-Process-Time", int_to_str(elapsed) + "ms");
+
+    var req_id: String = req.get_header("x-request-id");
+    if str_len(req_id) > 0 {
+        res.set_header("X-Request-ID", req_id);
+    }
+
+    if cfg.enable_cors {
+        apply_cors(req, res, cfg.cors);
+    }
+    if cfg.enable_security_headers {
+        apply_security_headers(res);
+    }
+    if cfg.enable_request_logging {
+        vout("[NextAPI] " + req.method + " " + req.path + " - " + int_to_str(res.status) + " (" + int_to_str(elapsed) + "ms)");
+    }
+    return res;
+}

@@ -201,9 +201,20 @@ impl LlvmCompiler {
         out.push_str("declare i64 @task_spawn(ptr, ptr)\n");
         out.push_str("declare ptr @nx_rt_task_join(i64)\n");
         out.push_str("declare ptr @task_join(i64)\n");
-        out.push_str("declare i1 @nx_rt_task_cancel(i64)\n");
-        out.push_str("declare i1 @task_cancel(i64)\n");
         out.push_str("declare ptr @timeout(i64, ptr)\n\n");
+
+        // Phase 11: HTTP & NextAPI Runtime Primitives
+        out.push_str("; Phase 11 HTTP & NextAPI Runtime Primitives\n");
+        out.push_str("declare ptr @nx_rt_http_parse(ptr)\n");
+        out.push_str("declare ptr @http_parse(ptr)\n");
+        out.push_str("declare ptr @nx_rt_url_decode(ptr)\n");
+        out.push_str("declare ptr @url_decode(ptr)\n");
+        out.push_str("declare ptr @nx_rt_url_encode(ptr)\n");
+        out.push_str("declare ptr @url_encode(ptr)\n");
+        out.push_str("declare ptr @nx_rt_http_status_message(i32)\n");
+        out.push_str("declare ptr @http_status_message(i32)\n");
+        out.push_str("declare ptr @nx_rt_int_to_str(i64)\n");
+        out.push_str("declare ptr @int_to_str(i64)\n\n");
 
         // 5. External C functions (e.g., abs, puts, etc.)
         let mut declared_externs: HashSet<String> = HashSet::new();
@@ -301,6 +312,16 @@ impl LlvmCompiler {
             "nx_rt_task_cancel",
             "task_cancel",
             "timeout",
+            "nx_rt_http_parse",
+            "http_parse",
+            "nx_rt_url_decode",
+            "url_decode",
+            "nx_rt_url_encode",
+            "url_encode",
+            "nx_rt_http_status_message",
+            "http_status_message",
+            "nx_rt_int_to_str",
+            "int_to_str",
         ]
         .into_iter()
         .collect();

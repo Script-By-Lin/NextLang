@@ -1,0 +1,55 @@
+// NextAPI - Security Foundations
+// Secure defaults, CORS preflight and header injection, and HTTP defense-in-depth
+
+class CorsConfig {
+    public var allow_origin: String = "*";
+    public var allow_methods: String = "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD";
+    public var allow_headers: String = "Content-Type, Authorization, X-Requested-With, X-Request-ID";
+    public var allow_credentials: Bool = false;
+    public var max_age: Int32 = 86400;
+    public var enabled: Bool = true;
+
+    public fn init(origin: String, methods: String, headers: String, credentials: Bool) -> Void {
+        self.allow_origin = origin;
+        self.allow_methods = methods;
+        self.allow_headers = headers;
+        self.allow_credentials = credentials;
+        self.max_age = 86400;
+        self.enabled = true;
+        return;
+    }
+}
+
+fn apply_cors(req: Request, res: Response, cors: CorsConfig) -> Void {
+    if not cors.enabled {
+        return;
+    }
+    res.set_header("Access-Control-Allow-Origin", cors.allow_origin);
+    res.set_header("Access-Control-Allow-Methods", cors.allow_methods);
+    res.set_header("Access-Control-Allow-Headers", cors.allow_headers);
+    if cors.allow_credentials {
+        res.set_header("Access-Control-Allow-Credentials", "true");
+    }
+    return;
+}
+
+fn handle_options_preflight(cors: CorsConfig) -> Response {
+    var res: Response = Response(204, "text/plain; charset=utf-8", "");
+    res.status_text = "No Content";
+    res.set_header("Access-Control-Allow-Origin", cors.allow_origin);
+    res.set_header("Access-Control-Allow-Methods", cors.allow_methods);
+    res.set_header("Access-Control-Allow-Headers", cors.allow_headers);
+    res.set_header("Access-Control-Max-Age", int_to_str(cors.max_age));
+    if cors.allow_credentials {
+        res.set_header("Access-Control-Allow-Credentials", "true");
+    }
+    return res;
+}
+
+fn apply_security_headers(res: Response) -> Void {
+    res.set_header("X-Content-Type-Options", "nosniff");
+    res.set_header("X-Frame-Options", "DENY");
+    res.set_header("X-XSS-Protection", "1; mode=block");
+    res.set_header("Referrer-Policy", "strict-origin-when-cross-origin");
+    return;
+}

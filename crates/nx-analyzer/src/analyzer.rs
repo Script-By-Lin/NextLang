@@ -1541,8 +1541,6 @@ impl<'a> SemanticAnalyzer<'a> {
                     }
                 }
             }
-            self.try_move_expr(val_expr);
-
             if fn_ctx.return_type == SemType::Void {
                 self.diagnostics.error_code_with_help(
                     "NX-FUNC-003",
@@ -1571,6 +1569,7 @@ impl<'a> SemanticAnalyzer<'a> {
                     );
                 }
             }
+            self.try_move_expr(val_expr);
         } else if fn_ctx.return_type != SemType::Void {
             self.diagnostics.error_code_with_help(
                 "NX-FUNC-003",
@@ -2943,10 +2942,6 @@ impl<'a> SemanticAnalyzer<'a> {
                                     ),
                                     format!("parameter {} is declared as <{}>", i + 1, expected_p),
                                 );
-                            } else if !expected_p.is_copy()
-                                && !matches!(expected_p, SemType::Reference { .. })
-                            {
-                                self.try_move_expr(arg);
                             }
                         }
                     }
@@ -3101,10 +3096,6 @@ impl<'a> SemanticAnalyzer<'a> {
                                     ),
                                     format!("parameter {} is declared as <{}>", i + 1, expected_p),
                                 );
-                            } else if !expected_p.is_copy()
-                                && !matches!(expected_p, SemType::Reference { .. })
-                            {
-                                self.try_move_expr(arg);
                             }
                         }
                     }

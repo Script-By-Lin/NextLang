@@ -104,6 +104,17 @@ impl AstLowering {
         extern_functions.insert("nx_rt_task_cancel".to_string(), NirType::Bool);
         extern_functions.insert("task_cancel".to_string(), NirType::Bool);
         extern_functions.insert("timeout".to_string(), NirType::Ptr);
+        // Phase 11: HTTP & NextAPI runtime builtins
+        extern_functions.insert("nx_rt_http_parse".to_string(), NirType::Ptr);
+        extern_functions.insert("http_parse".to_string(), NirType::Ptr);
+        extern_functions.insert("nx_rt_url_decode".to_string(), NirType::Ptr);
+        extern_functions.insert("url_decode".to_string(), NirType::Ptr);
+        extern_functions.insert("nx_rt_url_encode".to_string(), NirType::Ptr);
+        extern_functions.insert("url_encode".to_string(), NirType::Ptr);
+        extern_functions.insert("nx_rt_http_status_message".to_string(), NirType::Ptr);
+        extern_functions.insert("http_status_message".to_string(), NirType::Ptr);
+        extern_functions.insert("nx_rt_int_to_str".to_string(), NirType::Ptr);
+        extern_functions.insert("int_to_str".to_string(), NirType::Ptr);
 
         Self {
             module: NirModule::new(module_name),

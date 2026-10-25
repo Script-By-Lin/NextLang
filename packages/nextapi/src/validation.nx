@@ -1,0 +1,161 @@
+// NextAPI - Validation System
+// Automatic input validation, constraint checking, and structured HTTP 422 error generation
+
+class ValidationError {
+    public var field: String = "";
+    public var message: String = "";
+    public var error_type: String = "value_error";
+
+    public fn init(field: String, msg: String, err_type: String) -> Void {
+        self.field = field;
+        self.message = msg;
+        self.error_type = err_type;
+        return;
+    }
+}
+
+fn validate_required(val: String) -> Bool {
+    return str_len(str_trim(val)) > 0;
+}
+
+fn validate_int(val: String) -> Bool {
+    var trimmed: String = str_trim(val);
+    var len: Int64 = str_len(trimmed);
+    if len == 0 {
+        return false;
+    }
+    var i: Int64 = 0;
+    if str_sub(trimmed, 0, 1) == "-" {
+        if len == 1 {
+            return false;
+        }
+        i = 1;
+    }
+    As i < len {
+        var ch: String = str_sub(trimmed, i, 1);
+        if (ch != "0") & (ch != "1") & (ch != "2") & (ch != "3") & (ch != "4") & (ch != "5") & (ch != "6") & (ch != "7") & (ch != "8") & (ch != "9") {
+            return false;
+        }
+        i++;
+    }
+    return true;
+}
+
+fn validate_float(val: String) -> Bool {
+    var trimmed: String = str_trim(val);
+    var len: Int64 = str_len(trimmed);
+    if len == 0 {
+        return false;
+    }
+    var i: Int64 = 0;
+    var dot_count: Int64 = 0;
+    if str_sub(trimmed, 0, 1) == "-" {
+        if len == 1 {
+            return false;
+        }
+        i = 1;
+    }
+    As i < len {
+        var ch: String = str_sub(trimmed, i, 1);
+        if ch == "." {
+            dot_count++;
+            if dot_count > 1 {
+                return false;
+            }
+        } otherwise (ch != "0") & (ch != "1") & (ch != "2") & (ch != "3") & (ch != "4") & (ch != "5") & (ch != "6") & (ch != "7") & (ch != "8") & (ch != "9") {
+            return false;
+        }
+        i++;
+    }
+    return true;
+}
+
+fn validate_bool(val: String) -> Bool {
+    var lower: String = str_lower(str_trim(val));
+    return (lower == "true") | (lower == "false") | (lower == "1") | (lower == "0");
+}
+
+fn validate_min_length(val: String, min_len: Int64) -> Bool {
+    return str_len(val) >= min_len;
+}
+
+fn validate_max_length(val: String, max_len: Int64) -> Bool {
+    return str_len(val) <= max_len;
+}
+
+fn validate_int_range(val: Int64, min_val: Int64, max_val: Int64) -> Bool {
+    return (val >= min_val) & (val <= max_val);
+}
+
+fn build_validation_error_response(field: String, msg: String, err_type: String) -> Response {
+    var json_body: String = "{\"error\":{\"code\":\"VALIDATION_ERROR\",\"message\":\"Request validation failed\",\"details\":[{\"loc\":[\"body\",\"" + field + "\"],\"msg\":\"" + msg + "\",\"type\":\"" + err_type + "\"}]}}";
+    return Response.json(json_body, 422);
+}
+
+fn validate_json(body: String) -> Bool {
+    var trimmed: String = str_trim(body);
+    var len: Int64 = str_len(trimmed);
+    if len == 0 {
+        return true;
+    }
+    var first: String = str_sub(trimmed, 0, 1);
+    var last: String = str_sub(trimmed, len - 1, 1);
+    if (first == "{") & (last == "}") {
+        var braces: Int64 = 0;
+        var in_str: Bool = false;
+        var i: Int64 = 0;
+        As i < len {
+            var ch: String = str_sub(trimmed, i, 1);
+            if ch == "\"" {
+                if i > 0 {
+                    if str_sub(trimmed, i - 1, 1) != "\\" {
+                        in_str = not in_str;
+                    }
+                } else {
+                    in_str = not in_str;
+                }
+            } otherwise not in_str {
+                if ch == "{" {
+                    braces = braces + 1;
+                } otherwise ch == "}" {
+                    braces = braces - 1;
+                    if braces < 0 {
+                        return false;
+                    }
+                }
+            }
+            i++;
+        }
+        return (braces == 0) & (not in_str);
+    }
+    if (first == "[") & (last == "]") {
+        var brackets: Int64 = 0;
+        var in_str: Bool = false;
+        var i: Int64 = 0;
+        As i < len {
+            var ch: String = str_sub(trimmed, i, 1);
+            if ch == "\"" {
+                if i > 0 {
+                    if str_sub(trimmed, i - 1, 1) != "\\" {
+                        in_str = not in_str;
+                    }
+                } else {
+                    in_str = not in_str;
+                }
+            } otherwise not in_str {
+                if ch == "[" {
+                    brackets = brackets + 1;
+                } otherwise ch == "]" {
+                    brackets = brackets - 1;
+                    if brackets < 0 {
+                        return false;
+                    }
+                }
+            }
+            i++;
+        }
+        return (brackets == 0) & (not in_str);
+    }
+    return false;
+}
+

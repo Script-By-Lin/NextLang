@@ -1842,6 +1842,121 @@ impl<W: Write> Interpreter<W> {
                 }
                 Ok(Some(Value::Void))
             }
+            "url_decode" => {
+                if let Some(arg) = args.first() {
+                    let s = match self.eval_expr(arg)?.unwrap_ref() {
+                        Value::String(s) => s,
+                        other => other.to_string(),
+                    };
+                    let mut out = String::new();
+                    let bytes = s.as_bytes();
+                    let mut i = 0;
+                    while i < bytes.len() {
+                        if bytes[i] == b'+' {
+                            out.push(' ');
+                            i += 1;
+                        } else if bytes[i] == b'%' && i + 2 < bytes.len() {
+                            if let Ok(byte) = u8::from_str_radix(&s[i + 1..i + 3], 16) {
+                                out.push(byte as char);
+                                i += 3;
+                            } else {
+                                out.push('%');
+                                i += 1;
+                            }
+                        } else {
+                            out.push(bytes[i] as char);
+                            i += 1;
+                        }
+                    }
+                    Ok(Some(Value::String(out)))
+                } else {
+                    Ok(Some(Value::String(String::new())))
+                }
+            }
+            "url_encode" => {
+                if let Some(arg) = args.first() {
+                    let s = match self.eval_expr(arg)?.unwrap_ref() {
+                        Value::String(s) => s,
+                        other => other.to_string(),
+                    };
+                    let mut out = String::new();
+                    for b in s.bytes() {
+                        if b.is_ascii_alphanumeric()
+                            || b == b'-'
+                            || b == b'_'
+                            || b == b'.'
+                            || b == b'~'
+                        {
+                            out.push(b as char);
+                        } else {
+                            out.push_str(&format!("%{:02X}", b));
+                        }
+                    }
+                    Ok(Some(Value::String(out)))
+                } else {
+                    Ok(Some(Value::String(String::new())))
+                }
+            }
+            "http_status_message" => {
+                let code = if let Some(arg) = args.first() {
+                    match self.eval_expr(arg)?.unwrap_ref() {
+                        Value::Int(n) => n as i32,
+                        _ => 200,
+                    }
+                } else {
+                    200
+                };
+                let msg = match code {
+                    200 => "OK",
+                    201 => "Created",
+                    202 => "Accepted",
+                    204 => "No Content",
+                    301 => "Moved Permanently",
+                    302 => "Found",
+                    304 => "Not Modified",
+                    307 => "Temporary Redirect",
+                    308 => "Permanent Redirect",
+                    400 => "Bad Request",
+                    401 => "Unauthorized",
+                    403 => "Forbidden",
+                    404 => "Not Found",
+                    405 => "Method Not Allowed",
+                    409 => "Conflict",
+                    413 => "Payload Too Large",
+                    415 => "Unsupported Media Type",
+                    422 => "Unprocessable Entity",
+                    500 => "Internal Server Error",
+                    501 => "Not Implemented",
+                    502 => "Bad Gateway",
+                    503 => "Service Unavailable",
+                    _ => "Unknown",
+                };
+                Ok(Some(Value::String(msg.to_string())))
+            }
+            "int_to_str" => {
+                let v = if let Some(arg) = args.first() {
+                    match self.eval_expr(arg)?.unwrap_ref() {
+                        Value::Int(n) => n.to_string(),
+                        Value::Float(f) => (f as i64).to_string(),
+                        other => other.to_string(),
+                    }
+                } else {
+                    "0".to_string()
+                };
+                Ok(Some(Value::String(v)))
+            }
+            "http_parse" => {
+                if let Some(arg) = args.first() {
+                    let raw = match self.eval_expr(arg)?.unwrap_ref() {
+                        Value::String(s) => s,
+                        other => other.to_string(),
+                    };
+                    let res = parse_raw_http_to_json(&raw);
+                    Ok(Some(Value::String(res)))
+                } else {
+                    Ok(Some(Value::String("{\"valid\":false,\"method\":\"\",\"path\":\"\",\"query\":\"\",\"headers\":{},\"body\":\"\",\"content_length\":0,\"error\":\"no input\"}".to_string())))
+                }
+            }
             _ => Ok(None),
         }
     }
@@ -2214,4 +2329,106 @@ impl<W: Write> Interpreter<W> {
             _ => Ok(None),
         }
     }
+}
+
+pub fn parse_raw_http_to_json(raw: &str) -> String {
+    if raw.is_empty() {
+        return "{\"valid\":false,\"method\":\"\",\"path\":\"\",\"query\":\"\",\"headers\":{},\"body\":\"\",\"content_length\":0,\"error\":\"empty request\"}".to_string();
+    }
+
+    let line_end = match raw.find("\r\n") {
+        Some(pos) => (pos, 2),
+        None => match raw.find('\n') {
+            Some(pos) => (pos, 1),
+            None => {
+                return "{\"valid\":false,\"method\":\"\",\"path\":\"\",\"query\":\"\",\"headers\":{},\"body\":\"\",\"content_length\":0,\"error\":\"malformed request: no newline\"}".to_string()
+            }
+        },
+    };
+
+    let first_line = &raw[..line_end.0];
+    let parts: Vec<&str> = first_line.split_whitespace().collect();
+    if parts.len() < 2 {
+        return "{\"valid\":false,\"method\":\"\",\"path\":\"\",\"query\":\"\",\"headers\":{},\"body\":\"\",\"content_length\":0,\"error\":\"malformed request line\"}".to_string();
+    }
+
+    let method = parts[0];
+    if !["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"].contains(&method) {
+        return "{\"valid\":false,\"method\":\"\",\"path\":\"\",\"query\":\"\",\"headers\":{},\"body\":\"\",\"content_length\":0,\"error\":\"unsupported HTTP method\"}".to_string();
+    }
+
+    let uri = parts[1];
+    let (path, query) = match uri.find('?') {
+        Some(pos) => (&uri[..pos], &uri[pos + 1..]),
+        None => (uri, ""),
+    };
+
+    let after_line = &raw[line_end.0 + line_end.1..];
+    let (header_part, body) = if let Some(boundary) = after_line.find("\r\n\r\n") {
+        (&after_line[..boundary], &after_line[boundary + 4..])
+    } else if let Some(boundary) = after_line.find("\n\n") {
+        (&after_line[..boundary], &after_line[boundary + 2..])
+    } else {
+        (after_line, "")
+    };
+
+    let mut headers_map: Vec<String> = Vec::new();
+    let mut content_length: usize = 0;
+    let mut cl_count = 0;
+    let mut has_te = false;
+
+    for line in header_part.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if let Some(colon) = trimmed.find(':') {
+            let key = trimmed[..colon].trim().to_lowercase();
+            let val = trimmed[colon + 1..].trim();
+            if key == "content-length" {
+                cl_count += 1;
+                if let Ok(n) = val.parse::<usize>() {
+                    content_length = n;
+                }
+                if cl_count > 1 {
+                    return "{\"valid\":false,\"method\":\"\",\"path\":\"\",\"query\":\"\",\"headers\":{},\"body\":\"\",\"content_length\":0,\"error\":\"request smuggling risk: multiple Content-Length headers\"}".to_string();
+                }
+            } else if key == "transfer-encoding" {
+                has_te = true;
+            }
+
+            let escaped_val = val.replace('\\', "\\\\").replace('"', "\\\"");
+            headers_map.push(format!("\"{}\":\"{}\"", key, escaped_val));
+        }
+    }
+
+    if cl_count > 0 && has_te {
+        return "{\"valid\":false,\"method\":\"\",\"path\":\"\",\"query\":\"\",\"headers\":{},\"body\":\"\",\"content_length\":0,\"error\":\"request smuggling risk: both Content-Length and Transfer-Encoding present\"}".to_string();
+    }
+
+    let actual_body = if content_length > 0 && content_length < body.len() {
+        &body[..content_length]
+    } else {
+        body
+    };
+
+    let escaped_body = actual_body
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r")
+        .replace('\t', "\\t");
+
+    let escaped_path = path.replace('\\', "\\\\").replace('"', "\\\"");
+    let escaped_query = query.replace('\\', "\\\\").replace('"', "\\\"");
+
+    format!(
+        "{{\"valid\":true,\"method\":\"{}\",\"path\":\"{}\",\"query\":\"{}\",\"headers\":{{{}}},\"body\":\"{}\",\"content_length\":{},\"error\":\"\"}}",
+        method,
+        escaped_path,
+        escaped_query,
+        headers_map.join(","),
+        escaped_body,
+        actual_body.len()
+    )
 }

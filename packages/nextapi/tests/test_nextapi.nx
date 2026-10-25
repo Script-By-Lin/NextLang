@@ -1,0 +1,170 @@
+// NextAPI Comprehensive Test Suite
+// Verifies Milestones A-E: Routing, Validation, Middleware, OpenAPI, Lifecycle, and Exceptions
+
+import "../src/lib.nx";
+
+test "Milestone A: GET root returns 200 OK" {
+    var app: NextAPI = NextAPI.create();
+    app.get("/", "Root Endpoint", "Default landing page", "general");
+    var client: TestClient = TestClient(app);
+    var res: Response = client.get("/");
+    assert(res.status == 200, "GET / should return 200 OK");
+}
+
+test "Milestone A: GET unknown route returns 404" {
+    var app: NextAPI = NextAPI.create();
+    var client: TestClient = TestClient(app);
+    var res: Response = client.get("/nonexistent/endpoint/404");
+    assert(res.status == 404, "Unknown route should return 404");
+    assert(str_contains(res.body, "NOT_FOUND"), "Body should indicate NOT_FOUND");
+}
+
+test "Milestone B: POST valid JSON returns 201 Created" {
+    var app: NextAPI = NextAPI.create();
+    app.post("/users", "Create User", "Creates user from json payload", "users");
+    var client: TestClient = TestClient(app);
+    var res: Response = client.post("/users", "{\"name\":\"Alice\",\"role\":\"admin\"}");
+    assert(res.status == 201, "POST valid json should return 201");
+    assert(str_contains(res.body, "Alice"), "Response should reflect payload data");
+}
+
+test "Milestone B: POST malformed JSON returns 400 Bad Request" {
+    var app: NextAPI = NextAPI.create();
+    app.post("/users", "Create User", "Creates user from json payload", "users");
+    var client: TestClient = TestClient(app);
+    var res: Response = client.post("/users", "{\"name\":\"Alice\"");
+    assert(res.status == 400, "POST unclosed JSON should return 400");
+    assert(str_contains(res.body, "BAD_REQUEST"), "Body should indicate BAD_REQUEST");
+}
+
+test "Milestone B: Typed path parameter validation returns 422" {
+    var app: NextAPI = NextAPI.create();
+    app.get("/users/{id}", "Get User", "Finds user by integer id", "users");
+    var client: TestClient = TestClient(app);
+    
+    // Valid integer param
+    var valid_res: Response = client.get("/users/42");
+    assert(valid_res.status == 200, "Valid integer parameter should return 200");
+    
+    // Invalid non-integer param
+    var invalid_res: Response = client.get("/users/not_an_int");
+    assert(invalid_res.status == 422, "Invalid integer parameter should return 422");
+    assert(str_contains(invalid_res.body, "VALIDATION_ERROR"), "Body should indicate VALIDATION_ERROR");
+}
+
+test "Milestone B: Unsupported HTTP method returns 405 with Allow header" {
+    var app: NextAPI = NextAPI.create();
+    app.get("/resource", "Get Resource", "Reads resource", "resource");
+    var client: TestClient = TestClient(app);
+    var res: Response = client.delete("/resource");
+    assert(res.status == 405, "DELETE on GET-only route should return 405");
+    assert(str_contains(res.body, "METHOD_NOT_ALLOWED"), "Body should indicate METHOD_NOT_ALLOWED");
+    var allow_hdr: String = res.get_header("Allow");
+    assert(str_contains(allow_hdr, "GET"), "Allow header must specify allowed method GET");
+}
+
+test "Milestone C: Oversized request payload returns 413 Payload Too Large" {
+    var app: NextAPI = NextAPI.create();
+    app.middleware.max_body_size = 30; // 30 bytes limit
+    app.post("/upload", "Upload", "Payload endpoint", "data");
+    var client: TestClient = TestClient(app);
+    var res: Response = client.post("/upload", "{\"msg\":\"This payload is way larger than thirty bytes threshold\"}");
+    assert(res.status == 413, "Exceeding body limit should return 413");
+    assert(str_contains(res.body, "PAYLOAD_TOO_LARGE"), "Body should indicate PAYLOAD_TOO_LARGE");
+}
+
+test "Milestone C: Dependency Injection container registers and retrieves" {
+    var deps: DependencyContainer = DependencyContainer();
+    deps.register("db_url", "postgres://localhost:5432/mydb");
+    deps.register("jwt_secret", "secret_token_1234");
+    assert(deps.has("db_url") == true, "Must contain db_url");
+    assert(deps.has("missing_key") == false, "Must not contain missing_key");
+    assert(deps.get("db_url", "") == "postgres://localhost:5432/mydb", "Must retrieve registered db_url");
+    assert(deps.get("missing_key", "default_val") == "default_val", "Must return fallback default_val");
+}
+
+test "Milestone C: Middleware applies CORS and security headers" {
+    var app: NextAPI = NextAPI.create();
+    app.get("/ping", "Ping", "Health check", "system");
+    var client: TestClient = TestClient(app);
+    var res: Response = client.get("/ping");
+    assert(res.status == 200, "Ping should return 200");
+    assert(res.get_header("X-Content-Type-Options") == "nosniff", "Must include X-Content-Type-Options");
+    assert(res.get_header("X-Frame-Options") == "DENY", "Must include X-Frame-Options");
+    assert(str_len(res.get_header("X-Process-Time")) > 0, "Must include X-Process-Time header");
+}
+
+test "Milestone D: Automatic OpenAPI 3.0.3 specification generator" {
+    var app: NextAPI = NextAPI("E-Commerce API", "2.0.0", "Online store async REST API");
+    app.get("/products", "List Products", "Retrieve product catalog", "catalog");
+    app.get("/products/{id}", "Get Product", "Product detail by ID", "catalog");
+    app.post("/products", "Create Product", "Add new product", "catalog");
+    var client: TestClient = TestClient(app);
+    var res: Response = client.get("/openapi.json");
+    assert(res.status == 200, "GET /openapi.json should return 200 OK");
+    assert(str_contains(res.body, "\"openapi\":\"3.0.3\""), "Specification must declare openapi 3.0.3");
+    assert(str_contains(res.body, "E-Commerce API"), "Must contain application title");
+    assert(str_contains(res.body, "/products"), "Must list /products path");
+    assert(str_contains(res.body, "/products/{id}"), "Must list /products/{id} path");
+}
+
+test "Milestone D: Interactive Swagger UI testing interface" {
+    var app: NextAPI = NextAPI.create();
+    app.get("/status", "Status", "Check status", "system");
+    var client: TestClient = TestClient(app);
+    var res: Response = client.get("/docs");
+    assert(res.status == 200, "GET /docs should return 200 OK");
+    assert(str_contains(res.body, "swagger-ui"), "Must link to swagger-ui style sheet");
+    assert(str_contains(res.body, "Execute Real Request"), "Must provide interactive execution button");
+}
+
+test "Milestone D: ReDoc documentation endpoint" {
+    var app: NextAPI = NextAPI.create();
+    var client: TestClient = TestClient(app);
+    var res: Response = client.get("/redoc");
+    assert(res.status == 200, "GET /redoc should return 200 OK");
+    assert(str_contains(res.body, "<redoc spec-url="), "Must contain redoc custom web component");
+}
+
+test "Milestone D: Disabled documentation returns 404" {
+    var app: NextAPI = NextAPI.create();
+    app.enable_docs = false;
+    var client: TestClient = TestClient(app);
+    var res_docs: Response = client.get("/docs");
+    assert(res_docs.status == 404, "Disabled docs should return 404");
+    var res_spec: Response = client.get("/openapi.json");
+    assert(res_spec.status == 404, "Disabled openapi spec should return 404");
+}
+
+test "Milestone E: Internal handler error returns 500 without leaking internals" {
+    var app: NextAPI = NextAPI.create();
+    app.get("/trigger-error", "Faulty Endpoint", "Simulates failure", "tests");
+    var client: TestClient = TestClient(app);
+    var res: Response = client.request("GET", "/trigger-error", "", "throw_error");
+    assert(res.status == 500, "Internal error should return 500");
+    assert(str_contains(res.body, "INTERNAL_SERVER_ERROR"), "Should return INTERNAL_SERVER_ERROR code");
+    assert(not str_contains(res.body, "stack"), "Must not leak internal stack traces");
+    assert(not str_contains(res.body, "panic"), "Must not leak panic information");
+}
+
+test "Milestone E: Lifecycle management and graceful shutdown" {
+    var app: NextAPI = NextAPI.create();
+    assert(app.lifecycle.is_running == false, "Server initially not running");
+    app.lifecycle.trigger_startup();
+    assert(app.lifecycle.is_running == true, "Server running after trigger_startup");
+    app.lifecycle.trigger_shutdown();
+    assert(app.lifecycle.is_shutting_down == true, "Server shutting down after trigger_shutdown");
+    assert(app.lifecycle.is_running == false, "Server no longer running");
+}
+
+test "Milestone E: Modular router prefixing and duplicate prevention" {
+    var app: NextAPI = NextAPI.create();
+    var v1: Router = Router("/api/v1");
+    v1.get("/health", "Health", "Service health", "health");
+    v1.get("/health", "Health Duplicate", "Should not duplicate", "health");
+    assert(v1.route_count == 1, "Duplicate route should be ignored");
+    app.include_router(v1);
+    var client: TestClient = TestClient(app);
+    var res: Response = client.get("/api/v1/health");
+    assert(res.status == 200, "Prefixed route should be accessible with 200");
+}

@@ -1,0 +1,260 @@
+// NextAPI - Routing Engine
+// Static routes, dynamic path parameters ({id}), route prefixes, duplicate detection, and 405 Method Not Allowed handling
+
+fn normalize_path(raw: String) -> String {
+    var p: String = raw;
+    var len: Int64 = str_len(p);
+    if len == 0 {
+        return "/";
+    }
+    if not str_starts_with(p, "/") {
+        p = "/" + p;
+        len++;
+    }
+    if (len > 1) & str_ends_with(p, "/") {
+        p = str_sub(p, 0, len - 1);
+    }
+    return p;
+}
+
+fn count_segments(p: String) -> Int32 {
+    var norm: String = normalize_path(p);
+    if norm == "/" {
+        return 0;
+    }
+    var len: Int64 = str_len(norm);
+    var count: Int32 = 0;
+    var i: Int64 = 0;
+    As i < len {
+        if str_sub(norm, i, 1) == "/" {
+            count++;
+        }
+        i++;
+    }
+    return count;
+}
+
+fn get_segment(p: String, idx: Int32) -> String {
+    var norm: String = normalize_path(p);
+    var len: Int64 = str_len(norm);
+    var seg_num: Int32 = 0;
+    var i: Int64 = 1;
+    var seg_start: Int64 = 1;
+    As i <= len {
+        var is_end: Bool = (i == len) | (str_sub(norm, i, 1) == "/");
+        if is_end {
+            if seg_num == idx {
+                return str_sub(norm, seg_start, i - seg_start);
+            }
+            seg_num++;
+            seg_start = i + 1;
+        }
+        i++;
+    }
+    return "";
+}
+
+fn match_path_pattern(pattern: String, actual_path: String) -> Bool {
+    var np: String = normalize_path(pattern);
+    var na: String = normalize_path(actual_path);
+    if np == na {
+        return true;
+    }
+    var seg_pat: Int32 = count_segments(np);
+    var seg_act: Int32 = count_segments(na);
+    if seg_pat != seg_act {
+        return false;
+    }
+    if seg_pat == 0 {
+        return np == na;
+    }
+    var s: Int32 = 0;
+    As s < seg_pat {
+        var p_seg: String = get_segment(np, s);
+        var a_seg: String = get_segment(na, s);
+        var is_param: Bool = str_starts_with(p_seg, "{") & str_ends_with(p_seg, "}");
+        if not is_param {
+            if p_seg != a_seg {
+                return false;
+            }
+        } else {
+            if str_len(a_seg) == 0 {
+                return false;
+            }
+        }
+        s++;
+    }
+    return true;
+}
+
+fn extract_path_params(pattern: String, actual_path: String, req: Request) -> Void {
+    var np: String = normalize_path(pattern);
+    var na: String = normalize_path(actual_path);
+    var seg_cnt: Int32 = count_segments(np);
+    var s: Int32 = 0;
+    As s < seg_cnt {
+        var p_seg: String = get_segment(np, s);
+        var a_seg: String = get_segment(na, s);
+        if str_starts_with(p_seg, "{") & str_ends_with(p_seg, "}") {
+            var plen: Int64 = str_len(p_seg);
+            var param_name: String = str_sub(p_seg, 1, plen - 2);
+            req.set_param(param_name, a_seg);
+        }
+        s++;
+    }
+    return;
+}
+
+class Router {
+    public var prefix: String = "";
+    public var routes_data: String = "";
+    public var route_count: Int32 = 0;
+
+    public fn init(prefix: String) -> Void {
+        if str_len(prefix) > 0 {
+            self.prefix = normalize_path(prefix);
+        } else {
+            self.prefix = "";
+        }
+        self.routes_data = "";
+        self.route_count = 0;
+        return;
+    }
+
+    public fn add_route(method: String, raw_path: String, summary: String, desc: String, tag: String) -> Void {
+        var full_path: String = "";
+        if str_len(self.prefix) > 0 {
+            if raw_path == "/" {
+                full_path = self.prefix;
+            } else {
+                full_path = self.prefix + normalize_path(raw_path);
+            }
+        } else {
+            full_path = normalize_path(raw_path);
+        }
+
+        var dup_key: String = "@@" + method + "||" + full_path + "||";
+        if str_contains(self.routes_data, dup_key) {
+            vout("[NextAPI Warning] Duplicate route ignored: " + method + " " + full_path);
+            return;
+        }
+
+        var clean_summary: String = summary;
+        if str_len(clean_summary) == 0 {
+            clean_summary = method + " " + full_path;
+        }
+        var clean_desc: String = desc;
+        if str_len(clean_desc) == 0 {
+            clean_desc = method + " " + full_path;
+        }
+        var clean_tag: String = tag;
+        if str_len(clean_tag) == 0 {
+            clean_tag = "default";
+        }
+
+        self.routes_data = self.routes_data + "@@" + method + "||" + full_path + "||" + clean_summary + "||" + clean_desc + "||" + clean_tag + "@@";
+        self.route_count = self.route_count + 1;
+        return;
+    }
+
+    public fn get(path: String, summary: String, desc: String, tag: String) -> Void {
+        self.add_route("GET", path, summary, desc, tag);
+        return;
+    }
+
+    public fn post(path: String, summary: String, desc: String, tag: String) -> Void {
+        self.add_route("POST", path, summary, desc, tag);
+        return;
+    }
+
+    public fn put(path: String, summary: String, desc: String, tag: String) -> Void {
+        self.add_route("PUT", path, summary, desc, tag);
+        return;
+    }
+
+    public fn delete(path: String, summary: String, desc: String, tag: String) -> Void {
+        self.add_route("DELETE", path, summary, desc, tag);
+        return;
+    }
+
+    public fn patch(path: String, summary: String, desc: String, tag: String) -> Void {
+        self.add_route("PATCH", path, summary, desc, tag);
+        return;
+    }
+
+    public fn head(path: String, summary: String, desc: String, tag: String) -> Void {
+        self.add_route("HEAD", path, summary, desc, tag);
+        return;
+    }
+
+    public fn options(path: String, summary: String, desc: String, tag: String) -> Void {
+        self.add_route("OPTIONS", path, summary, desc, tag);
+        return;
+    }
+
+    public fn get_route_field(idx: Int32, field_idx: Int32) -> String {
+        var total_len: Int64 = str_len(self.routes_data);
+        var curr_idx: Int32 = 0;
+        var i: Int64 = 0;
+        As i <= total_len - 2 {
+            if str_sub(self.routes_data, i, 2) == "@@" {
+                var entry_start: Int64 = i + 2;
+                var j: Int64 = entry_start;
+                As j <= total_len - 2 {
+                    if str_sub(self.routes_data, j, 2) == "@@" {
+                        if curr_idx == idx {
+                            var entry: String = str_sub(self.routes_data, entry_start, j - entry_start);
+                            return extract_entry_field(entry, field_idx);
+                        }
+                        curr_idx++;
+                        i = j + 1;
+                        j = total_len; // break inner
+                    }
+                    j++;
+                }
+            }
+            i++;
+        }
+        return "";
+    }
+
+    public fn get_route_method(idx: Int32) -> String {
+        return self.get_route_field(idx, 0);
+    }
+
+    public fn get_route_path(idx: Int32) -> String {
+        return self.get_route_field(idx, 1);
+    }
+
+    public fn get_route_summary(idx: Int32) -> String {
+        return self.get_route_field(idx, 2);
+    }
+
+    public fn get_route_desc(idx: Int32) -> String {
+        return self.get_route_field(idx, 3);
+    }
+
+    public fn get_route_tag(idx: Int32) -> String {
+        return self.get_route_field(idx, 4);
+    }
+}
+
+fn extract_entry_field(entry: String, field_idx: Int32) -> String {
+    var elen: Int64 = str_len(entry);
+    var curr_f: Int32 = 0;
+    var f_start: Int64 = 0;
+    var i: Int64 = 0;
+    As i <= elen {
+        var is_end: Bool = (i == elen) | ((i <= elen - 2) & (str_sub(entry, i, 2) == "||"));
+        if is_end {
+            if curr_f == field_idx {
+                return str_sub(entry, f_start, i - f_start);
+            }
+            curr_f++;
+            f_start = i + 2;
+            i++; // skip second bar
+        }
+        i++;
+    }
+    return "";
+}

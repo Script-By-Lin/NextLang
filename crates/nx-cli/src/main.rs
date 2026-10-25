@@ -40,6 +40,7 @@ Build & Execution:
     run-native <file|binary> Compile and run source natively or execute native binary
     check [file.nx]          Validate source file or project for errors
     compile-js [file.nx]     Compile source file to executable JavaScript (-o <out.js>, --target node|browser)
+    api dev [entry] [opts]   Start NextAPI development server (--host <h>, --port <p>)
 
 Inspection & Debugging:
     dump-nir <file.nx>       Dump NextLang typed Intermediate Representation (NIR)
@@ -310,6 +311,10 @@ fn cmd_test(path_arg: Option<&str>, filter_opt: Option<&str>) -> Result<(), ()> 
         if src_dir.is_dir() {
             collect_test_files(&src_dir, &mut test_files);
         }
+        let packages_dir = root.join("packages");
+        if packages_dir.is_dir() {
+            collect_test_files(&packages_dir, &mut test_files);
+        }
     }
 
     test_files.sort();
@@ -525,6 +530,37 @@ fn cmd_run(path: &Path, time_flag: bool) -> Result<(), ()> {
             Err(())
         }
     }
+}
+
+fn cmd_api_dev(
+    entry_path: Option<&str>,
+    host_opt: Option<&str>,
+    port_opt: Option<&str>,
+) -> Result<(), ()> {
+    let path = match resolve_entry_path(entry_path) {
+        Ok(p) => p,
+        Err(err) => {
+            eprintln!("{}", err);
+            return Err(());
+        }
+    };
+
+    let host = host_opt.unwrap_or("127.0.0.1");
+    let port = port_opt.unwrap_or("8000");
+
+    println!("============================================================");
+    println!("  NextAPI Development Server (nx api dev)");
+    println!("  Entry point: {}", path.display());
+    println!("  Target: http://{}:{}", host, port);
+    println!("  Interactive Swagger UI: http://{}:{}/docs", host, port);
+    println!("  ReDoc: http://{}:{}/redoc", host, port);
+    println!(
+        "  OpenAPI Specification: http://{}:{}/openapi.json",
+        host, port
+    );
+    println!("============================================================");
+
+    cmd_run(&path, false)
 }
 
 fn cmd_compile_js(
@@ -920,6 +956,35 @@ fn main() {
 
             if cmd_run(&path, time_flag).is_err() {
                 process::exit(1);
+            }
+        }
+        "api" => {
+            let subcommand = args.get(2).map(|s| s.as_str());
+            match subcommand {
+                Some("dev") => {
+                    let mut entry = None;
+                    let mut host = None;
+                    let mut port = None;
+
+                    let mut iter = args[3..].iter().peekable();
+                    while let Some(arg) = iter.next() {
+                        if arg == "--host" {
+                            host = iter.next().map(|s| s.as_str());
+                        } else if arg == "--port" {
+                            port = iter.next().map(|s| s.as_str());
+                        } else if !arg.starts_with("--") && entry.is_none() {
+                            entry = Some(arg.as_str());
+                        }
+                    }
+
+                    if cmd_api_dev(entry, host, port).is_err() {
+                        process::exit(1);
+                    }
+                }
+                _ => {
+                    eprintln!("error: 'api' requires a subcommand, e.g. 'nx api dev'\n\nUsage:\n    nx api dev [entry.nx] [--host <host>] [--port <port>]");
+                    process::exit(1);
+                }
             }
         }
         "compile-js" => {

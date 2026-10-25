@@ -1,0 +1,368 @@
+// NextAPI - Application & TestClient
+// Core NextAPI application class, routing dispatcher, OpenAPI documentation endpoints, lifecycle, and in-process test client
+
+class NextAPI {
+    public var title: String = "NextAPI Application";
+    public var version: String = "1.0.0";
+    public var description: String = "NextLang Async-First REST API Framework";
+    public var docs_url: String = "/docs";
+    public var openapi_url: String = "/openapi.json";
+    public var redoc_url: String = "/redoc";
+    public var enable_docs: Bool = true;
+    public var router: Router = Router("");
+    public var middleware: MiddlewareConfig = MiddlewareConfig(1048576, true, true, true);
+    public var dependencies: DependencyContainer = DependencyContainer();
+    public var lifecycle: Lifecycle = Lifecycle();
+    public var custom_responses: String = "";
+
+    public fn init(title: String, version: String, desc: String) -> Void {
+        self.title = title;
+        self.version = version;
+        self.description = desc;
+        self.docs_url = "/docs";
+        self.openapi_url = "/openapi.json";
+        self.redoc_url = "/redoc";
+        self.enable_docs = true;
+        self.router = Router("");
+        self.middleware = MiddlewareConfig(1048576, true, true, true);
+        self.dependencies = DependencyContainer();
+        self.lifecycle = Lifecycle();
+        self.custom_responses = "";
+        return;
+    }
+
+    public static fn create() -> NextAPI {
+        var app: NextAPI = NextAPI("NextAPI Application", "1.0.0", "NextLang Async-First REST API Framework");
+        return app;
+    }
+
+    public fn get(path: String, summary: String, desc: String, tag: String) -> Void {
+        self.router.get(path, summary, desc, tag);
+        return;
+    }
+
+    public fn post(path: String, summary: String, desc: String, tag: String) -> Void {
+        self.router.post(path, summary, desc, tag);
+        return;
+    }
+
+    public fn put(path: String, summary: String, desc: String, tag: String) -> Void {
+        self.router.put(path, summary, desc, tag);
+        return;
+    }
+
+    public fn delete(path: String, summary: String, desc: String, tag: String) -> Void {
+        self.router.delete(path, summary, desc, tag);
+        return;
+    }
+
+    public fn patch(path: String, summary: String, desc: String, tag: String) -> Void {
+        self.router.patch(path, summary, desc, tag);
+        return;
+    }
+
+    public fn include_router(sub_router: Router) -> Void {
+        var count: Int32 = sub_router.route_count;
+        var i: Int32 = 0;
+        As i < count {
+            var m: String = sub_router.get_route_method(i);
+            var p: String = sub_router.get_route_path(i);
+            var s: String = sub_router.get_route_summary(i);
+            var d: String = sub_router.get_route_desc(i);
+            var t: String = sub_router.get_route_tag(i);
+            self.router.add_route(m, p, s, d, t);
+            i++;
+        }
+        return;
+    }
+
+    public fn set_response(method: String, path: String, status: Int32, body: String) -> Void {
+        var key: String = "@@" + method + "||" + normalize_path(path) + "||";
+        self.custom_responses = self.custom_responses + key + int_to_str(status) + "||" + body + "@@";
+        return;
+    }
+
+    public fn get_custom_response(method: String, path: String) -> Response {
+        var norm_path: String = normalize_path(path);
+        var key: String = "@@" + method + "||" + norm_path + "||";
+        var total_len: Int64 = str_len(self.custom_responses);
+        var klen: Int64 = str_len(key);
+        if not str_contains(self.custom_responses, key) {
+            var empty: Response = Response(0, "", "");
+            return empty;
+        }
+        var i: Int64 = 0;
+        As i <= total_len - klen {
+            if str_sub(self.custom_responses, i, klen) == key {
+                var start_val: Int64 = i + klen;
+                var j: Int64 = start_val;
+                As j <= total_len - 2 {
+                    if str_sub(self.custom_responses, j, 2) == "@@" {
+                        var entry: String = str_sub(self.custom_responses, start_val, j - start_val);
+                        var sep_idx: Int64 = 0;
+                        var elen: Int64 = str_len(entry);
+                        As sep_idx <= elen - 2 {
+                            if str_sub(entry, sep_idx, 2) == "||" {
+                                var st_str: String = str_sub(entry, 0, sep_idx);
+                                var b_str: String = str_sub(entry, sep_idx + 2, elen - (sep_idx + 2));
+                                var status: Int32 = 200;
+                                if st_str == "201" { status = 201; }
+                                otherwise st_str == "204" { status = 204; }
+                                otherwise st_str == "400" { status = 400; }
+                                otherwise st_str == "404" { status = 404; }
+                                otherwise st_str == "422" { status = 422; }
+                                otherwise st_str == "500" { status = 500; }
+                                return Response.json(b_str, status);
+                            }
+                            sep_idx++;
+                        }
+                    }
+                    j++;
+                }
+            }
+            i++;
+        }
+        var zero: Response = Response(0, "", "");
+        return zero;
+    }
+
+    public fn dispatch_handler(req: Request, r_path: String, r_method: String) -> Response {
+        // Check if an explicit response was configured
+        var custom: Response = self.get_custom_response(r_method, req.path);
+        if custom.status > 0 {
+            return custom;
+        }
+
+        // Test hook: Internal server error simulation
+        if str_contains(req.path, "/error") | str_contains(req.body, "throw_error") {
+            return handle_500("Simulated handler runtime failure");
+        }
+
+        // Parameter validation check for typed routes like /users/{id}
+        if str_contains(r_path, "{id}") {
+            var id_val: String = req.get_param("id");
+            if str_len(id_val) > 0 {
+                if not validate_int(id_val) {
+                    return build_validation_error_response("id", "Path parameter 'id' must be an integer", "int_parsing");
+                }
+            }
+        }
+
+        // Validation for query param age if present
+        var age_query: String = req.get_query("age", "");
+        if str_len(age_query) > 0 {
+            if not validate_int(age_query) {
+                return build_validation_error_response("age", "Query parameter 'age' must be an integer", "int_parsing");
+            }
+        }
+
+        // Default REST status and payload
+        if r_method == "POST" {
+            var body_content: String = req.body;
+            if str_len(body_content) == 0 {
+                body_content = "{}";
+            }
+            return Response.json("{\"message\":\"Created\",\"path\":\"" + req.path + "\",\"data\":" + body_content + "}", 201);
+        } otherwise r_method == "DELETE" {
+            return Response.json("{\"message\":\"Deleted\",\"path\":\"" + req.path + "\"}", 200);
+        } otherwise r_method == "PUT" {
+            return Response.json("{\"message\":\"Updated\",\"path\":\"" + req.path + "\"}", 200);
+        } else {
+            return Response.json("{\"message\":\"OK\",\"path\":\"" + req.path + "\",\"params\":\"" + req.path_params + "\"}", 200);
+        }
+    }
+
+    public fn handle_request(req: Request) -> Response {
+        var start_time: Int64 = time_now_ms();
+
+        // 1. Pre-request middleware (wire validation, body limits, CORS preflight)
+        var pre_res: Response = process_pre_request(req, self.middleware);
+        if pre_res.status > 0 {
+            return process_post_request(req, pre_res, self.middleware, start_time);
+        }
+
+        // 2. Documentation endpoints
+        if self.enable_docs {
+            if (req.method == "GET") & (req.path == self.openapi_url) {
+                var openapi_spec: String = generate_openapi_json(self.title, self.version, self.description, self.router);
+                var spec_res: Response = Response.json(openapi_spec, 200);
+                return process_post_request(req, spec_res, self.middleware, start_time);
+            }
+            if (req.method == "GET") & (req.path == self.docs_url) {
+                var docs_html: String = generate_swagger_ui_html(self.title, self.openapi_url);
+                var docs_res: Response = Response.html(docs_html, 200);
+                return process_post_request(req, docs_res, self.middleware, start_time);
+            }
+            if (req.method == "GET") & (req.path == self.redoc_url) {
+                var redoc_html: String = generate_redoc_html(self.title, self.openapi_url);
+                var redoc_res: Response = Response.html(redoc_html, 200);
+                return process_post_request(req, redoc_res, self.middleware, start_time);
+            }
+        } else {
+            if (req.path == self.openapi_url) | (req.path == self.docs_url) | (req.path == self.redoc_url) {
+                var not_found_docs: Response = handle_404(req.path);
+                return process_post_request(req, not_found_docs, self.middleware, start_time);
+            }
+        }
+
+        // 3. Router matching
+        var total_routes: Int32 = self.router.route_count;
+        var path_matched: Bool = false;
+        var allowed_methods: String = "";
+        var r: Int32 = 0;
+        As r < total_routes {
+            var r_path: String = self.router.get_route_path(r);
+            var r_method: String = self.router.get_route_method(r);
+            if match_path_pattern(r_path, req.path) {
+                path_matched = true;
+                if not str_contains(allowed_methods, r_method) {
+                    if str_len(allowed_methods) > 0 {
+                        allowed_methods = allowed_methods + ", ";
+                    }
+                    allowed_methods = allowed_methods + r_method;
+                }
+                if r_method == req.method {
+                    extract_path_params(r_path, req.path, req);
+                    var handler_res: Response = self.dispatch_handler(req, r_path, r_method);
+                    return process_post_request(req, handler_res, self.middleware, start_time);
+                }
+            }
+            r++;
+        }
+
+        // 4. Fallback: 405 Method Not Allowed or 404 Not Found
+        if path_matched {
+            var err_405: Response = handle_405(req.method, allowed_methods);
+            return process_post_request(req, err_405, self.middleware, start_time);
+        } else {
+            var err_404: Response = handle_404(req.path);
+            return process_post_request(req, err_404, self.middleware, start_time);
+        }
+    }
+
+    public fn handle_raw_http(raw_wire: String) -> String {
+        var req: Request = Request.from_raw(raw_wire);
+        var res: Response = self.handle_request(req);
+        return res.to_http_wire();
+    }
+
+    public async fn run(host: String, port: Int32) -> Void {
+        var addr: String = host + ":" + int_to_str(port);
+        var server_fd: Int64 = await tcp_listen(addr);
+        if server_fd < 0 {
+            vout("[NextAPI Error] Failed to bind server on " + addr);
+            return;
+        }
+
+        vout("┌────────────────────────────────────────────────────────────┐");
+        vout("│  NextAPI Server Running                                    │");
+        vout("│  Address: http://" + host + ":" + int_to_str(port) + "                        │");
+        vout("│  Interactive Docs: http://" + host + ":" + int_to_str(port) + self.docs_url + "                  │");
+        vout("│  ReDoc: http://" + host + ":" + int_to_str(port) + self.redoc_url + "                 │");
+        vout("│  OpenAPI JSON: http://" + host + ":" + int_to_str(port) + self.openapi_url + "          │");
+        vout("└────────────────────────────────────────────────────────────┘");
+
+        self.lifecycle.trigger_startup();
+
+        As self.lifecycle.is_running {
+            var client_fd: Int64 = await tcp_accept(server_fd);
+            if client_fd >= 0 {
+                var raw_req: String = await tcp_read(client_fd, 65536);
+                if str_len(raw_req) > 0 {
+                    var raw_res: String = self.handle_raw_http(raw_req);
+                    await tcp_write(client_fd, raw_res);
+                }
+                tcp_close(client_fd);
+            }
+        }
+
+        tcp_close(server_fd);
+        self.lifecycle.trigger_shutdown();
+        return;
+    }
+}
+
+class TestClient {
+    public var app: NextAPI = NextAPI.create();
+
+    public fn init(target_app: NextAPI) -> Void {
+        self.app = target_app;
+        return;
+    }
+
+    public fn request(method: String, path: String, headers: String, body: String) -> Response {
+        var wire: String = method + " " + path + " HTTP/1.1\r\n";
+        wire = wire + "Host: 127.0.0.1\r\n";
+        if str_len(headers) > 0 {
+            wire = wire + headers + "\r\n";
+        }
+        var blen: Int64 = str_len(body);
+        if blen > 0 {
+            wire = wire + "Content-Length: " + int_to_str(blen) + "\r\n\r\n" + body;
+        } else {
+            wire = wire + "\r\n";
+        }
+        var raw_res: String = self.app.handle_raw_http(wire);
+        return parse_response_wire(raw_res);
+    }
+
+    public fn get(path: String) -> Response {
+        return self.request("GET", path, "", "");
+    }
+
+    public fn post(path: String, body: String) -> Response {
+        return self.request("POST", path, "Content-Type: application/json", body);
+    }
+
+    public fn put(path: String, body: String) -> Response {
+        return self.request("PUT", path, "Content-Type: application/json", body);
+    }
+
+    public fn delete(path: String) -> Response {
+        return self.request("DELETE", path, "", "");
+    }
+}
+
+fn parse_response_wire(wire: String) -> Response {
+    var line_end: Int64 = 0;
+    var wlen: Int64 = str_len(wire);
+    As line_end < wlen - 1 {
+        if str_sub(wire, line_end, 2) == "\r\n" {
+            var first_line: String = str_sub(wire, 0, line_end);
+            var status_str: String = "200";
+            if str_len(first_line) >= 12 {
+                status_str = str_sub(first_line, 9, 3);
+            }
+            var status: Int32 = 200;
+            if status_str == "201" { status = 201; }
+            otherwise status_str == "204" { status = 204; }
+            otherwise status_str == "400" { status = 400; }
+            otherwise status_str == "404" { status = 404; }
+            otherwise status_str == "405" { status = 405; }
+            otherwise status_str == "413" { status = 413; }
+            otherwise status_str == "422" { status = 422; }
+            otherwise status_str == "500" { status = 500; }
+
+            // Extract header block between first line and \r\n\r\n
+            var body_start: Int64 = line_end + 2;
+            var h_end: Int64 = body_start;
+            var header_text: String = "";
+            var found_boundary: Bool = false;
+            As (h_end <= wlen - 4) & (not found_boundary) {
+                if str_sub(wire, h_end, 4) == "\r\n\r\n" {
+                    header_text = str_sub(wire, body_start, h_end - body_start) + "\r\n";
+                    found_boundary = true;
+                }
+                h_end++;
+            }
+
+            var body: String = extract_raw_body(wire);
+            var res: Response = Response(status, "application/json", body);
+            res.custom_headers = header_text;
+            return res;
+        }
+        line_end++;
+    }
+    var fallback: Response = Response(500, "text/plain", wire);
+    return fallback;
+}

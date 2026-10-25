@@ -1,0 +1,58 @@
+// NextAPI - Exception and Error Handling
+// Consistent, safe error models with standardized JSON error payloads
+
+class HttpException {
+    public var status_code: Int32 = 500;
+    public var code: String = "INTERNAL_ERROR";
+    public var message: String = "Internal Server Error";
+
+    public fn init(status: Int32, code: String, msg: String) -> Void {
+        self.status_code = status;
+        self.code = code;
+        self.message = msg;
+        return;
+    }
+
+    public fn to_response() -> Response {
+        var json: String = "{\"error\":{\"code\":\"" + self.code + "\",\"message\":\"" + self.message + "\",\"status\":" + int_to_str(self.status_code) + "}}";
+        return Response.json(json, self.status_code);
+    }
+}
+
+fn handle_400(msg: String) -> Response {
+    var desc: String = msg;
+    if str_len(desc) == 0 {
+        desc = "Malformed request syntax or framing error";
+    }
+    var json: String = "{\"error\":{\"code\":\"BAD_REQUEST\",\"message\":\"" + desc + "\",\"status\":400}}";
+    return Response.json(json, 400);
+}
+
+fn handle_404(path: String) -> Response {
+    var json: String = "{\"error\":{\"code\":\"NOT_FOUND\",\"message\":\"Resource not found at path '" + path + "'\",\"status\":404}}";
+    return Response.json(json, 404);
+}
+
+fn handle_405(method: String, allowed: String) -> Response {
+    var json: String = "{\"error\":{\"code\":\"METHOD_NOT_ALLOWED\",\"message\":\"Method '" + method + "' not allowed on this resource\",\"allowed\":\"" + allowed + "\",\"status\":405}}";
+    var res: Response = Response.json(json, 405);
+    res.set_header("Allow", allowed);
+    return res;
+}
+
+fn handle_413() -> Response {
+    var json: String = "{\"error\":{\"code\":\"PAYLOAD_TOO_LARGE\",\"message\":\"Request payload exceeds configured size limit\",\"status\":413}}";
+    return Response.json(json, 413);
+}
+
+fn handle_422(details: String) -> Response {
+    var json: String = "{\"error\":{\"code\":\"VALIDATION_ERROR\",\"message\":\"" + details + "\",\"status\":422}}";
+    return Response.json(json, 422);
+}
+
+fn handle_500(msg: String) -> Response {
+    // Preserve security: do not expose internal stack traces or internal implementation paths
+    var safe_msg: String = "Internal server error encountered while processing request";
+    var json: String = "{\"error\":{\"code\":\"INTERNAL_SERVER_ERROR\",\"message\":\"" + safe_msg + "\",\"status\":500}}";
+    return Response.json(json, 500);
+}

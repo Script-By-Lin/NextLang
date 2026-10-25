@@ -110,6 +110,12 @@ impl<'a> ScopeChecker<'a> {
             "task_join",
             "task_cancel",
             "timeout",
+            // Phase 11: HTTP & NextAPI runtime builtins
+            "http_parse",
+            "url_decode",
+            "url_encode",
+            "http_status_message",
+            "int_to_str",
         ] {
             root_scope.insert(
                 builtin.to_string(),

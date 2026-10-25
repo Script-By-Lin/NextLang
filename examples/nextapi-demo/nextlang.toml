@@ -1,0 +1,12 @@
+[package]
+name = "nextapi-demo"
+version = "0.1.0"
+authors = ["NextLang Team"]
+description = "Demonstration of NextAPI async-first backend framework and interactive OpenAPI documentation"
+
+[dependencies]
+nextapi = { path = "../../packages/nextapi" }
+
+[build]
+entry = "src/main.nx"
+target = "native"

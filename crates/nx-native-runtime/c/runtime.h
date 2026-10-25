@@ -168,6 +168,18 @@ void* task_spawn(void* (*fn)(void*), void *arg);
 void* task_join(void *task);
 int8_t task_cancel(void *task);
 
+// Phase 11: HTTP & NextAPI Runtime Primitives
+const char* nx_rt_http_parse(const char *raw);
+const char* http_parse(const char *raw);
+const char* nx_rt_url_decode(const char *s);
+const char* url_decode(const char *s);
+const char* nx_rt_url_encode(const char *s);
+const char* url_encode(const char *s);
+const char* nx_rt_http_status_message(int32_t code);
+const char* http_status_message(int32_t code);
+const char* nx_rt_int_to_str(int64_t v);
+const char* int_to_str(int64_t v);
+
 #ifdef __cplusplus
 }
 #endif

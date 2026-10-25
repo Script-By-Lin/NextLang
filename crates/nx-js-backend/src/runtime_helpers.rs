@@ -209,6 +209,40 @@ function tcp_write(id, data) {
 function tcp_close(id) {
     return undefined;
 }
+function url_decode(s) {
+    try { return decodeURIComponent(String(s).replace(/\+/g, ' ')); } catch (_) { return String(s); }
+}
+function url_encode(s) {
+    return encodeURIComponent(String(s));
+}
+function http_status_message(code) {
+    const map = { 200: "OK", 201: "Created", 204: "No Content", 400: "Bad Request", 401: "Unauthorized", 403: "Forbidden", 404: "Not Found", 405: "Method Not Allowed", 413: "Payload Too Large", 422: "Unprocessable Entity", 500: "Internal Server Error" };
+    return map[code] || "Unknown";
+}
+function http_parse(raw) {
+    const s = String(raw || "");
+    const boundary = s.indexOf("\r\n\r\n") !== -1 ? s.indexOf("\r\n\r\n") : s.indexOf("\n\n");
+    const hPart = boundary !== -1 ? s.slice(0, boundary) : s;
+    const bPart = boundary !== -1 ? s.slice(boundary + (s.indexOf("\r\n\r\n") !== -1 ? 4 : 2)) : "";
+    const lines = hPart.split(/\r?\n/);
+    const first = (lines[0] || "").split(/\s+/);
+    if (first.length < 2) return JSON.stringify({ valid: false, method: "", path: "", query: "", headers: {}, body: "", content_length: 0, error: "malformed request" });
+    const method = first[0];
+    const uriParts = (first[1] || "").split("?");
+    const path = uriParts[0];
+    const query = uriParts[1] || "";
+    const headers = {};
+    for (let i = 1; i < lines.length; i++) {
+        const c = lines[i].indexOf(":");
+        if (c !== -1) {
+            headers[lines[i].slice(0, c).trim().toLowerCase()] = lines[i].slice(c + 1).trim();
+        }
+    }
+    return JSON.stringify({ valid: true, method, path, query, headers, body: bPart, content_length: bPart.length, error: "" });
+}
+function int_to_str(v) {
+    return String(v);
+}
 "#,
     );
 

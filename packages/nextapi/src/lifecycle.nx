@@ -1,0 +1,41 @@
+// NextAPI - Application Lifecycle
+// Startup and shutdown hooks, state transitions, and graceful termination management
+
+class Lifecycle {
+    public var is_running: Bool = false;
+    public var startup_hooks: String = "";
+    public var shutdown_hooks: String = "";
+    public var is_shutting_down: Bool = false;
+
+    public fn init() -> Void {
+        self.is_running = false;
+        self.startup_hooks = "";
+        self.shutdown_hooks = "";
+        self.is_shutting_down = false;
+        return;
+    }
+
+    public fn add_startup_hook(name: String) -> Void {
+        self.startup_hooks = self.startup_hooks + name + ";";
+        return;
+    }
+
+    public fn add_shutdown_hook(name: String) -> Void {
+        self.shutdown_hooks = self.shutdown_hooks + name + ";";
+        return;
+    }
+
+    public fn trigger_startup() -> Void {
+        self.is_running = true;
+        self.is_shutting_down = false;
+        vout("[NextAPI Lifecycle] Startup initiated, server state: RUNNING");
+        return;
+    }
+
+    public fn trigger_shutdown() -> Void {
+        self.is_shutting_down = true;
+        self.is_running = false;
+        vout("[NextAPI Lifecycle] Shutdown initiated, draining active requests...");
+        return;
+    }
+}

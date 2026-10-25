@@ -214,6 +214,12 @@ impl SymbolTable {
             ("task_join", SemType::Future(Box::new(SemType::Any))),
             ("task_cancel", SemType::Bool),
             ("timeout", SemType::Future(Box::new(SemType::Any))),
+            // Phase 11: HTTP & NextAPI runtime builtins
+            ("http_parse", SemType::String),
+            ("url_decode", SemType::String),
+            ("url_encode", SemType::String),
+            ("http_status_message", SemType::String),
+            ("int_to_str", SemType::String),
         ];
 
         for (bname, bty) in sys_builtins {

@@ -1,0 +1,83 @@
+// NextAPI - Response Model
+// Provides HTTP response construction, status codes, headers, and HTTP/1.1 wire serialization
+
+class Response {
+    public var status: Int32 = 200;
+    public var status_text: String = "OK";
+    public var content_type: String = "application/json";
+    public var body: String = "";
+    public var custom_headers: String = "";
+
+    public fn init(status: Int32, content_type: String, body: String) -> Void {
+        self.status = status;
+        self.status_text = http_status_message(status);
+        self.content_type = content_type;
+        self.body = body;
+        self.custom_headers = "";
+        return;
+    }
+
+    public fn set_header(key: String, val: String) -> Void {
+        self.custom_headers = self.custom_headers + key + ": " + val + "\r\n";
+        return;
+    }
+
+    public fn get_header(key: String) -> String {
+        var lower_key: String = str_lower(key) + ":";
+        var lower_headers: String = str_lower(self.custom_headers);
+        var klen: Int64 = str_len(lower_key);
+        var total_len: Int64 = str_len(lower_headers);
+        var i: Int64 = 0;
+        As i <= total_len - klen {
+            var prefix_ok: Bool = (i == 0) | (str_sub(lower_headers, i - 1, 1) == "\n");
+            if prefix_ok & (str_sub(lower_headers, i, klen) == lower_key) {
+                var start_val: Int64 = i + klen;
+                var j: Int64 = start_val;
+                As j < total_len {
+                    if (str_sub(lower_headers, j, 1) == "\r") | (str_sub(lower_headers, j, 1) == "\n") {
+                        return str_trim(str_sub(self.custom_headers, start_val, j - start_val));
+                    }
+                    j++;
+                }
+                return str_trim(str_sub(self.custom_headers, start_val, total_len - start_val));
+            }
+            i++;
+        }
+        return "";
+    }
+
+    public fn to_http_wire() -> String {
+        var body_len: Int64 = str_len(self.body);
+        var wire: String = "HTTP/1.1 " + int_to_str(self.status) + " " + self.status_text + "\r\n";
+        wire = wire + "Content-Type: " + self.content_type + "\r\n";
+        wire = wire + "Content-Length: " + int_to_str(body_len) + "\r\n";
+        wire = wire + "Connection: close\r\n";
+        if str_len(self.custom_headers) > 0 {
+            wire = wire + self.custom_headers;
+        }
+        wire = wire + "\r\n";
+        wire = wire + self.body;
+        return wire;
+    }
+
+    public static fn json(data: String, status: Int32) -> Response {
+        var res: Response = Response(status, "application/json", data);
+        return res;
+    }
+
+    public static fn text(text_str: String, status: Int32) -> Response {
+        var res: Response = Response(status, "text/plain; charset=utf-8", text_str);
+        return res;
+    }
+
+    public static fn html(html_str: String, status: Int32) -> Response {
+        var res: Response = Response(status, "text/html; charset=utf-8", html_str);
+        return res;
+    }
+
+    public static fn redirect(target_url: String, status: Int32) -> Response {
+        var res: Response = Response(status, "text/plain; charset=utf-8", "");
+        res.set_header("Location", target_url);
+        return res;
+    }
+}

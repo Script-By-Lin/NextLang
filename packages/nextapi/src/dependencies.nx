@@ -1,0 +1,62 @@
+// NextAPI - Dependency Injection
+// Lightweight, explicit container for application-scoped and request-scoped services
+
+class DependencyContainer {
+    public var keys: String = "";
+    public var values: String = "";
+    public var count: Int32 = 0;
+
+    public fn init() -> Void {
+        self.keys = "";
+        self.values = "";
+        self.count = 0;
+        return;
+    }
+
+    public fn register(key: String, value: String) -> Void {
+        var marker: String = "::" + key + "::";
+        if str_contains(self.keys, marker) {
+            return;
+        }
+        self.keys = self.keys + marker;
+        self.values = self.values + marker + value + "##";
+        self.count = self.count + 1;
+        return;
+    }
+
+    public fn has(key: String) -> Bool {
+        var marker: String = "::" + key + "::";
+        return str_contains(self.keys, marker);
+    }
+
+    public fn get(key: String, default_val: String) -> String {
+        var marker: String = "::" + key + "::";
+        if str_contains(self.keys, marker) {
+            var total_len: Int64 = str_len(self.values);
+            var m_len: Int64 = str_len(marker);
+            var i: Int64 = 0;
+            As i <= total_len - m_len {
+                if str_sub(self.values, i, m_len) == marker {
+                    var start_val: Int64 = i + m_len;
+                    var j: Int64 = start_val;
+                    As j <= total_len - 2 {
+                        if str_sub(self.values, j, 2) == "##" {
+                            return str_sub(self.values, start_val, j - start_val);
+                        }
+                        j++;
+                    }
+                    return str_sub(self.values, start_val, total_len - start_val);
+                }
+                i++;
+            }
+        }
+        return default_val;
+    }
+
+    public fn clear() -> Void {
+        self.keys = "";
+        self.values = "";
+        self.count = 0;
+        return;
+    }
+}
