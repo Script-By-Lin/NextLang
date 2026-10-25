@@ -524,3 +524,132 @@ fn sync_fn():<VOID> {
         .message
         .contains("await is only permitted inside async functions")));
 }
+
+#[test]
+fn test_modern_syntax_parsing() {
+    let src = r#"
+var age: Int32 = 25;
+const PI: Float64 = 3.14159;
+var inferred = 100;
+
+fn add(a: Int32, b: Int32) -> Int32 {
+    return a + b;
+}
+
+fn greet(name: String) -> Void {
+    vout("Hello", name);
+}
+
+class User {
+    var name: String;
+    var age: Int32;
+
+    fn init(name: String, age: Int32) -> Void {
+        self.name = name;
+        self.age = age;
+    }
+
+    fn introduce() -> Void {
+        vout("Hello, I am", self.name);
+    }
+}
+
+var user = User("Alex", 25);
+user.introduce();
+"#;
+    let mut bag = DiagnosticBag::new();
+    let prog = parse_source(src, &mut bag);
+    assert!(!bag.has_errors(), "diagnostics: {:?}", bag.diagnostics());
+    assert_eq!(prog.statements.len(), 8);
+
+    // 1. var age: Int32 = 25;
+    if let Stmt::VarDecl(ref v) = prog.statements[0] {
+        assert_eq!(v.name.name, "age");
+        assert_eq!(
+            v.type_annotation,
+            Some(Type::Named {
+                name: "Int32".into(),
+                span: v.type_annotation.as_ref().unwrap().span()
+            })
+        );
+        assert!(v.initializer.is_some());
+    } else {
+        panic!("expected VarDecl age");
+    }
+
+    // 2. const PI: Float64 = 3.14159;
+    if let Stmt::VarDecl(ref v) = prog.statements[1] {
+        assert_eq!(v.name.name, "PI");
+        assert_eq!(v.kind, VarKind::Const);
+        assert_eq!(
+            v.type_annotation,
+            Some(Type::Named {
+                name: "Float64".into(),
+                span: v.type_annotation.as_ref().unwrap().span()
+            })
+        );
+    } else {
+        panic!("expected VarDecl PI");
+    }
+
+    // 3. var inferred = 100;
+    if let Stmt::VarDecl(ref v) = prog.statements[2] {
+        assert_eq!(v.name.name, "inferred");
+        assert_eq!(v.type_annotation, None);
+        assert!(v.initializer.is_some());
+    } else {
+        panic!("expected inferred VarDecl");
+    }
+
+    // 4. fn add(...) -> Int32
+    if let Stmt::FunctionDecl(ref f) = prog.statements[3] {
+        assert_eq!(f.name.name, "add");
+        assert_eq!(f.params.len(), 2);
+        assert_eq!(
+            f.params[0].type_annotation,
+            Type::Named {
+                name: "Int32".into(),
+                span: f.params[0].type_annotation.span()
+            }
+        );
+        assert_eq!(
+            f.return_type,
+            Some(Type::Named {
+                name: "Int32".into(),
+                span: f.return_type.as_ref().unwrap().span()
+            })
+        );
+    } else {
+        panic!("expected FunctionDecl add");
+    }
+
+    // 5. fn greet(...) -> Void
+    if let Stmt::FunctionDecl(ref f) = prog.statements[4] {
+        assert_eq!(f.name.name, "greet");
+        assert_eq!(
+            f.return_type,
+            Some(Type::Named {
+                name: "Void".into(),
+                span: f.return_type.as_ref().unwrap().span()
+            })
+        );
+    } else {
+        panic!("expected FunctionDecl greet");
+    }
+
+    // 6. class User
+    if let Stmt::ClassDecl(ref c) = prog.statements[5] {
+        assert_eq!(c.name.name, "User");
+        assert_eq!(c.members.len(), 4);
+    } else {
+        panic!("expected ClassDecl User");
+    }
+
+    // 7. var user = User("Alex", 25);
+    if let Stmt::VarDecl(ref v) = prog.statements[6] {
+        assert_eq!(v.name.name, "user");
+        assert_eq!(v.type_annotation, None);
+    } else {
+        panic!("expected user VarDecl");
+    }
+}

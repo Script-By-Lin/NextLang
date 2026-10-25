@@ -45,17 +45,23 @@ NextLang provides three explicit declaration keywords to manage state, mutabilit
 
 <h3>Mutable Variables with var</h3>
 <p>
-The <b>var</b> keyword declares a standard mutable variable. The variable can be reassigned during its lifetime.
+The <b>var</b> keyword declares a standard mutable variable. The variable can be reassigned during its lifetime. NextLang supports both explicit type annotations and automatic local type inference when an initializer is present.
 </p>
-<pre><code>var counter:&lt;INT32&gt; = 0;
+<pre><code>// Explicit type annotation
+var counter: Int32 = 0;
 counter = counter + 1;
+
+// Local variable type inference
+var count = 10;
+var greeting = "Hello NextLang";
 </code></pre>
 
 <h3>Immutable Bindings with const</h3>
 <p>
 The <b>const</b> keyword declares an immutable variable binding. Reassignment to a const variable is strictly prohibited and caught at compile time.
 </p>
-<pre><code>const maximum_connections:&lt;INT32&gt; = 1000;
+<pre><code>const maximum_connections: Int32 = 1000;
+const PI: Float64 = 3.14159;
 // Attempting maximum_connections = 2000 produces compile error NX-TYPE-001
 </code></pre>
 
@@ -63,8 +69,19 @@ The <b>const</b> keyword declares an immutable variable binding. Reassignment to
 <p>
 The <b>tem</b> keyword declares a temporary scoped variable intended for short-lived intermediate computation.
 </p>
-<pre><code>tem temporary_token:&lt;STRING&gt; = "auth_session_token";
+<pre><code>tem temporary_token: String = "auth_session_token";
 vout("Session:", temporary_token);
+</code></pre>
+
+<h3>Local Type Inference</h3>
+<p>
+When an initializer expression is provided, local variables do not require explicit type annotations. The compiler analyzes the expression and assigns the exact static type automatically:
+</p>
+<pre><code>var age = 25; // Inferred as Int32
+var ratio = 3.14; // Inferred as Float64
+var title = "Developer"; // Inferred as String
+var active = true; // Inferred as Bool
+var user = User("Alex", 25); // Inferred as User instance
 </code></pre>
 
 <h3>Lexical Scope</h3>
@@ -77,35 +94,46 @@ Scopes are formed by curly braces <b>{</b> and <b>}</b>. Variables declared insi
 <h2>3. Comprehensive Type System</h2>
 
 <p>
-Type annotations in NextLang are explicitly declared within angle brackets after a colon: <b>:&lt;TYPE&gt;</b>.
+NextLang provides modern, clean type annotations using standard colon syntax: <b>: Type</b>. For full backward compatibility with earlier codebases, angle-bracket type annotations <b>:&lt;TYPE&gt;</b> remain 100% supported as aliases.
 </p>
 
-<h3>Exact Width Signed Integers</h3>
+<h3>Modern Type Annotations vs Legacy Aliases</h3>
 <p>
-NextLang provides exact bit-width signed integers stored using two's complement representation:
+NextLang supports conventional capitalized type names as primary syntax:
 </p>
-- <b>INT8</b>: 8-bit signed integer (-128 to 127)
-- <b>INT16</b>: 16-bit signed integer (-32768 to 32767)
-- <b>INT32</b>: 32-bit signed integer (-2147483648 to 2147483647)
-- <b>INT64</b>: 64-bit signed integer (standard full-width integer)
-- <b>INT128</b>: 128-bit signed integer for high-precision arithmetic
+<ul>
+<li><b>Int8</b> (alias: INT8): 8-bit signed integer (-128 to 127)</li>
+<li><b>Int16</b> (alias: INT16): 16-bit signed integer (-32768 to 32767)</li>
+<li><b>Int32</b> (alias: INT32): 32-bit signed integer (-2147483648 to 2147483647)</li>
+<li><b>Int64</b> (alias: INT64): 64-bit signed integer (standard full-width integer)</li>
+<li><b>Int128</b> (alias: INT128): 128-bit signed integer for high-precision arithmetic</li>
+<li><b>Uint8</b> (alias: UINT8): 8-bit unsigned integer / byte (0 to 255)</li>
+<li><b>Uint16</b> (alias: UINT16): 16-bit unsigned integer (0 to 65535)</li>
+<li><b>Uint32</b> (alias: UINT32): 32-bit unsigned integer (0 to 4294967295)</li>
+<li><b>Uint64</b> (alias: UINT64): 64-bit unsigned integer</li>
+<li><b>Uint128</b> (alias: UINT128): 128-bit unsigned integer</li>
+<li><b>Float32</b> (alias: FL32): IEEE-754 32-bit single-precision float</li>
+<li><b>Float64</b> (alias: FL64): IEEE-754 64-bit double-precision float</li>
+<li><b>Float128</b> (alias: FL128): 128-bit quad-precision float</li>
+<li><b>Bool</b> (alias: BOOL): Boolean value, either <b>true</b> or <b>false</b></li>
+<li><b>Char</b> (alias: CHAR): 32-bit Unicode character enclosed in single quotes</li>
+<li><b>String</b> (alias: STRING): UTF-8 character string enclosed in double quotes</li>
+<li><b>Void</b> (alias: VOID): Unit return type representing no returned value</li>
+<li><b>Any</b> (alias: ANY): Polymorphic type for heterogeneous values</li>
+<li><b>List&lt;T&gt;</b> (alias: LIST&lt;T&gt;): Dynamic ordered list</li>
+<li><b>Set&lt;T&gt;</b> (alias: SET&lt;T&gt;): Unique element hash set</li>
+<li><b>Map&lt;K, V&gt;</b> (alias: MAP&lt;K, V&gt;): Key-value hash map</li>
+<li><b>Future&lt;T&gt;</b> (alias: FUTURE&lt;T&gt;): Asynchronous task promise</li>
+</ul>
 
-<pre><code>var small_num:&lt;INT8&gt; = 127;
-var large_num:&lt;INT64&gt; = 9223372036854775807;
-</code></pre>
+<pre><code>// Modern Type Annotation Syntax
+var age: Int32 = 25;
+const PI: Float64 = 3.14159;
+var message: String = "Hello NextLang";
 
-<h3>Exact Width Unsigned Integers</h3>
-<p>
-Unsigned integers represent non-negative binary values:
-</p>
-- <b>UINT8</b>: 8-bit unsigned integer / byte (0 to 255)
-- <b>UINT16</b>: 16-bit unsigned integer (0 to 65535)
-- <b>UINT32</b>: 32-bit unsigned integer (0 to 4294967295)
-- <b>UINT64</b>: 64-bit unsigned integer
-- <b>UINT128</b>: 128-bit unsigned integer
-
-<pre><code>var byte_val:&lt;UINT8&gt; = 255;
-var word_val:&lt;UINT32&gt; = 4000000000;
+// Legacy Syntax (Fully Supported for Backward Compatibility)
+var old_age:&lt;INT32&gt; = 25;
+const OLD_PI:&lt;FL64&gt; = 3.14159;
 </code></pre>
 
 <h3>Platform-Sized Integers and Raw Pointers</h3>
@@ -348,26 +376,28 @@ match temp {
 <h2>6. Functions and Procedures</h2>
 
 <p>
-Functions are declared using the <b>fn</b> keyword, followed by parameter names and types, and an explicit return type.
+Functions are declared using the <b>fn</b> keyword, followed by parameter names and types, and an arrow return type annotation: <b>-&gt; RetType</b>. For backward compatibility, the colon return type <b>: RetType</b> is also accepted.
 </p>
 
 <h3>Value-Returning Functions</h3>
-<pre><code>fn compute_area(width:&lt;FL64&gt;, height:&lt;FL64&gt;):&lt;FL64&gt; {
-    var total:&lt;FL64&gt; = width / 2.0;
-    return width + height;
+<pre><code>fn add(a: Int32, b: Int32) -&gt; Int32 {
+    return a + b;
 }
 
-var result:&lt;FL64&gt; = compute_area(10.0, 20.0);
+var result: Int32 = add(10, 20);
 vout("Computed:", result);
 </code></pre>
 
-<h3>Procedures Returning VOID</h3>
+<h3>Procedures Returning Void</h3>
 <p>
-Procedures that perform side effects without returning data declare return type <b>:&lt;VOID&gt;</b> and exit using <b>return;</b>:
+Procedures that perform side effects without returning data declare return type <b>-&gt; Void</b>:
 </p>
-<pre><code>fn print_user_badge(username:&lt;STRING&gt;, level:&lt;INT32&gt;):&lt;VOID&gt; {
+<pre><code>fn greet(name: String) -&gt; Void {
+    vout("Hello", name);
+}
+
+fn print_user_badge(username: String, level: Int32) -&gt; Void {
     vout("User:", username, "| Security Level:", level);
-    return;
 }
 </code></pre>
 
@@ -417,13 +447,35 @@ When an owned heap resource is assigned to another variable or passed by value, 
 NextLang features a complete Object-Oriented Programming model designed for clean domain architecture.
 </p>
 
+<h3>Target OOP Syntax</h3>
+<p>
+Classes define encapsulated fields, instance methods, and constructor methods named <b>init</b>. The <b>self</b> identifier accesses fields and methods on the current object instance:
+</p>
+<pre><code>class User {
+    var name: String;
+    var age: Int32;
+
+    fn init(name: String, age: Int32) -&gt; Void {
+        self.name = name;
+        self.age = age;
+    }
+
+    fn introduce() -&gt; Void {
+        vout("Hello, I am", self.name);
+    }
+}
+
+var user = User("Alex", 25);
+user.introduce();
+</code></pre>
+
 <h3>Interfaces</h3>
 <p>
 An <b>interface</b> defines a public contract of methods that implementing classes must satisfy:
 </p>
 <pre><code>interface Identifiable {
-    fn get_id():&lt;INT32&gt;;
-    fn get_name():&lt;STRING&gt;;
+    fn get_id() -&gt; Int32;
+    fn get_name() -&gt; String;
 }
 </code></pre>
 
@@ -432,28 +484,26 @@ An <b>interface</b> defines a public contract of methods that implementing class
 Classes encapsulate fields and methods. The constructor method is named <b>init</b>:
 </p>
 <pre><code>class Person implements Identifiable {
-    public var id:&lt;INT32&gt; = 0;
-    public var name:&lt;STRING&gt; = "";
-    public var email:&lt;STRING&gt; = "";
+    public var id: Int32 = 0;
+    public var name: String = "";
+    public var email: String = "";
 
-    public fn init(p_id:&lt;INT32&gt;, p_name:&lt;STRING&gt;, p_email:&lt;STRING&gt;):&lt;VOID&gt; {
+    public fn init(p_id: Int32, p_name: String, p_email: String) -&gt; Void {
         self.id = p_id;
         self.name = p_name;
         self.email = p_email;
-        return;
     }
 
-    public fn get_id():&lt;INT32&gt; {
+    public fn get_id() -&gt; Int32 {
         return self.id;
     }
 
-    public fn get_name():&lt;STRING&gt; {
+    public fn get_name() -&gt; String {
         return self.name;
     }
 
-    public fn display():&lt;VOID&gt; {
+    public fn display() -&gt; Void {
         vout("Person ID:", self.id, "Name:", self.name, "Email:", self.email);
-        return;
     }
 }
 </code></pre>
@@ -463,25 +513,23 @@ Classes encapsulate fields and methods. The constructor method is named <b>init<
 A class can inherit fields and methods from a parent class using <b>extends</b>. The derived class can call parent methods using <b>super</b>:
 </p>
 <pre><code>class Student extends Person {
-    public var major:&lt;STRING&gt; = "";
-    public var gpa:&lt;FL64&gt; = 0.0;
+    public var major: String = "";
+    public var gpa: Float64 = 0.0;
 
-    public fn init(s_id:&lt;INT32&gt;, s_name:&lt;STRING&gt;, s_email:&lt;STRING&gt;, s_major:&lt;STRING&gt;, s_gpa:&lt;FL64&gt;):&lt;VOID&gt; {
+    public fn init(s_id: Int32, s_name: String, s_email: String, s_major: String, s_gpa: Float64) -&gt; Void {
         self.id = s_id;
         self.name = s_name;
         self.email = s_email;
         self.major = s_major;
         self.gpa = s_gpa;
-        return;
     }
 
-    public fn get_gpa():&lt;FL64&gt; {
+    public fn get_gpa() -&gt; Float64 {
         return self.gpa;
     }
 
-    public fn display():&lt;VOID&gt; {
+    public fn display() -&gt; Void {
         vout("Student ID:", self.id, "| Name:", self.name, "| Major:", self.major, "| GPA:", self.gpa);
-        return;
     }
 }
 </code></pre>
@@ -491,12 +539,12 @@ A class can inherit fields and methods from a parent class using <b>extends</b>.
 Methods declared with <b>static</b> are called directly on the class name without requiring an instance:
 </p>
 <pre><code>class MathUtil {
-    public static fn double_val(x:&lt;INT32&gt;):&lt;INT32&gt; {
+    public static fn double_val(x: Int32) -&gt; Int32 {
         return x + x;
     }
 }
 
-var res:&lt;INT32&gt; = MathUtil.double_val(25);
+var res = MathUtil.double_val(25);
 vout("Doubled:", res);
 </code></pre>
 
@@ -504,8 +552,8 @@ vout("Doubled:", res);
 <p>
 Derived class instances can be assigned to base class references:
 </p>
-<pre><code>var s:&lt;Student&gt; = Student(101, "Alice", "alice@university.edu", "Computer Science", 3.9);
-var p:&lt;Person&gt; = s; // Polymorphic upcast
+<pre><code>var s = Student(101, "Alice", "alice@university.edu", "Computer Science", 3.9);
+var p: Person = s; // Polymorphic upcast
 p.display();
 </code></pre>
 

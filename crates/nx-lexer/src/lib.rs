@@ -89,6 +89,7 @@ pub enum TokenKind {
     LtLt,       // <<
     GtGt,       // >>
     DotDot,     // ..
+    Arrow,      // ->
 
     // Punctuation
     Colon,        // :
@@ -181,6 +182,7 @@ impl TokenKind {
             TokenKind::LtLt => "<<",
             TokenKind::GtGt => ">>",
             TokenKind::DotDot => "..",
+            TokenKind::Arrow => "->",
             TokenKind::Colon => ":",
             TokenKind::Semicolon => ";",
             TokenKind::Comma => ",",
@@ -616,6 +618,9 @@ impl<'a> Lexer<'a> {
                     } else if self.peek() == Some(b'=') {
                         self.advance();
                         TokenKind::MinusEq
+                    } else if self.peek() == Some(b'>') {
+                        self.advance();
+                        TokenKind::Arrow
                     } else {
                         TokenKind::Minus
                     }
@@ -787,5 +792,16 @@ mod tests {
         assert_eq!(tokens[10].kind, TokenKind::Return);
         assert_eq!(tokens[11].kind, TokenKind::Await);
         assert_eq!(tokens[12].kind, TokenKind::Ident("get_data".into()));
+    }
+
+    #[test]
+    fn test_arrow_token() {
+        let mut bag = DiagnosticBag::new();
+        let src = "fn add(a: Int32, b: Int32) -> Int32";
+        let mut lexer = Lexer::new(src);
+        let tokens = lexer.tokenize(&mut bag);
+        assert!(!bag.has_errors());
+        assert_eq!(tokens[11].kind, TokenKind::Arrow);
+        assert_eq!(tokens[11].kind.as_str(), "->");
     }
 }

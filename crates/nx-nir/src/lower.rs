@@ -173,6 +173,18 @@ impl AstLowering {
         }
     }
 
+    fn operand_type(&self, op: &NirOperand) -> NirType {
+        match op {
+            NirOperand::Const(c) => c.ty(),
+            NirOperand::Var(name) => self
+                .temp_types
+                .get(name)
+                .cloned()
+                .or_else(|| self.lookup_var(name).map(|(_, ty)| ty))
+                .unwrap_or(NirType::I32),
+        }
+    }
+
     fn emit_inst(&mut self, inst: NirInst) {
         match &inst {
             NirInst::Load { dest, ty, .. } => {
@@ -321,7 +333,14 @@ impl AstLowering {
         // Add instance fields
         for member in &c.members {
             if let ClassMember::Field(f) = member {
-                let ty = self.map_type(&f.var_decl.type_annotation);
+                let ty = if let Some(ref ann) = f.var_decl.type_annotation {
+                    self.map_type(ann)
+                } else if let Some(ref init) = f.var_decl.initializer {
+                    let val = self.lower_expr(init);
+                    self.operand_type(&val)
+                } else {
+                    NirType::I32
+                };
                 layout.add_field(&f.var_decl.name.name, ty);
             } else if let ClassMember::Method(m) = member {
                 layout.methods.push(m.function.name.name.clone());
@@ -556,21 +575,33 @@ impl AstLowering {
     fn lower_statement(&mut self, stmt: &Stmt) {
         match stmt {
             Stmt::VarDecl(decl) => {
-                let ty = self.map_type(&decl.type_annotation);
+                let (val, ty) = if let Some(ref init) = decl.initializer {
+                    let val = self.lower_expr(init);
+                    let ty = if let Some(ref ann) = decl.type_annotation {
+                        self.map_type(ann)
+                    } else {
+                        self.operand_type(&val)
+                    };
+                    (Some(val), ty)
+                } else if let Some(ref ann) = decl.type_annotation {
+                    (None, self.map_type(ann))
+                } else {
+                    (None, NirType::I32)
+                };
+
                 let ptr = self.new_temp();
                 self.emit_inst(NirInst::Alloca {
                     dest: ptr.clone(),
                     ty: ty.clone(),
                 });
 
-                if let Some(ref init) = decl.initializer {
-                    let val = self.lower_expr(init);
+                if let Some(val) = val {
                     self.emit_inst(NirInst::Store {
                         dest_ptr: ptr.clone(),
                         src: val,
                     });
                 }
-                if let Type::Named { name, .. } = &decl.type_annotation {
+                if let Some(Type::Named { name, .. }) = &decl.type_annotation {
                     if self.classes.contains_key(name) {
                         self.insert_var_class(decl.name.name.clone(), name.clone());
                     }
@@ -1794,38 +1825,38 @@ impl AstLowering {
     fn map_type(&self, ty: &Type) -> NirType {
         match ty {
             Type::Named { name, .. } => match name.as_str() {
-                "INT8" => NirType::I8,
-                "INT16" => NirType::I16,
-                "INT32" => NirType::I32,
-                "INT64" => NirType::I64,
-                "INT128" => NirType::I128,
-                "ISIZE" => NirType::I64,
-                "UINT8" => NirType::U8,
-                "UINT16" => NirType::U16,
-                "UINT32" => NirType::U32,
-                "UINT64" => NirType::U64,
-                "UINT128" => NirType::U128,
-                "USIZE" => NirType::U64,
-                "PTR" => NirType::Ptr,
-                "FL32" => NirType::F32,
-                "FL64" => NirType::F64,
-                "BOOL" => NirType::Bool,
-                "CHAR" => NirType::Char,
-                "STRING" => NirType::Ptr,
-                "VOID" => NirType::Void,
+                "INT8" | "Int8" | "i8" => NirType::I8,
+                "INT16" | "Int16" | "i16" => NirType::I16,
+                "INT32" | "Int32" | "i32" | "Int" | "int" => NirType::I32,
+                "INT64" | "Int64" | "i64" => NirType::I64,
+                "INT128" | "Int128" | "i128" => NirType::I128,
+                "ISIZE" | "isize" | "Isize" => NirType::I64,
+                "UINT8" | "Uint8" | "u8" | "Byte" | "byte" => NirType::U8,
+                "UINT16" | "Uint16" | "u16" => NirType::U16,
+                "UINT32" | "Uint32" | "u32" | "Uint" | "uint" => NirType::U32,
+                "UINT64" | "Uint64" | "u64" => NirType::U64,
+                "UINT128" | "Uint128" | "u128" => NirType::U128,
+                "USIZE" | "usize" | "Usize" => NirType::U64,
+                "PTR" | "ptr" | "Ptr" | "RAWPTR" => NirType::Ptr,
+                "FL32" | "Float32" | "float32" | "f32" => NirType::F32,
+                "FL64" | "Float64" | "float64" | "f64" | "Float" | "float" => NirType::F64,
+                "BOOL" | "Bool" | "bool" | "Boolean" => NirType::Bool,
+                "CHAR" | "Char" | "char" => NirType::Char,
+                "STRING" | "String" | "string" => NirType::Ptr,
+                "VOID" | "Void" | "void" => NirType::Void,
                 _ => NirType::Ptr,
             },
             Type::Generic {
                 name, type_args, ..
             } => match name.as_str() {
-                "FUTURE" | "TASK" => {
+                "FUTURE" | "Future" | "TASK" | "Task" => {
                     if let Some(inner) = type_args.first() {
                         self.map_type(inner)
                     } else {
                         NirType::Ptr
                     }
                 }
-                "HEAP" | "LIST" | "SET" | "MAP" => NirType::Ptr,
+                "HEAP" | "Heap" | "LIST" | "List" | "SET" | "Set" | "MAP" | "Map" => NirType::Ptr,
                 _ => NirType::Ptr,
             },
             Type::Reference { .. } => NirType::Ptr,

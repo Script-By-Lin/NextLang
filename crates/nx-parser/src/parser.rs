@@ -360,22 +360,28 @@ impl<'a> Parser<'a> {
             }
         };
 
-        if !self.match_token(&TokenKind::Colon) {
+        let (type_annotation, initializer) = if self.match_token(&TokenKind::Colon) {
+            let ty = self.parse_type_annotation()?;
+            let init = if self.match_token(&TokenKind::Eq) {
+                Some(self.parse_expression()?)
+            } else {
+                None
+            };
+            (Some(ty), init)
+        } else if self.match_token(&TokenKind::Eq) {
+            let init = self.parse_expression()?;
+            (None, Some(init))
+        } else {
             let span = self.peek().span;
             self.diagnostics.error_with_help(
                 span,
-                format!("expected ':' type annotation for variable '{}'", name.name),
-                "NextLang requires explicit type annotations: e.g. 'var x:<INT32> = ...;'",
+                format!(
+                    "expected ':' type annotation or '=' initializer for variable '{}'",
+                    name.name
+                ),
+                "NextLang requires explicit type annotations or initializers: e.g. 'var x: Int32 = 10;' or 'var x = 10;'",
             );
             return None;
-        }
-
-        let type_annotation = self.parse_type_annotation()?;
-
-        let initializer = if self.match_token(&TokenKind::Eq) {
-            Some(self.parse_expression()?)
-        } else {
-            None
         };
 
         let had_semi = self.expect_semicolon();
@@ -395,29 +401,33 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_type_annotation(&mut self) -> Option<Type> {
-        let open_token = self.expect(&TokenKind::Lt, "expected '<' to start type annotation")?;
-        let parsed_type = self.parse_type_expression()?;
-        let close_token = self.expect_gt("expected '>' to close type annotation")?;
+        if self.match_token(&TokenKind::Lt) {
+            let open_token = self.previous().clone();
+            let parsed_type = self.parse_type_expression()?;
+            let close_token = self.expect_gt("expected '>' to close type annotation")?;
 
-        let span = open_token.span.merge(close_token.span);
-        // Update span to encompass `< ... >`
-        let full_type = match parsed_type {
-            Type::Named { name, .. } => Type::Named { name, span },
-            Type::Generic {
-                name, type_args, ..
-            } => Type::Generic {
-                name,
-                type_args,
-                span,
-            },
-            Type::Union { types, .. } => Type::Union { types, span },
-            Type::Reference { inner, is_mut, .. } => Type::Reference {
-                inner,
-                is_mut,
-                span,
-            },
-        };
-        Some(full_type)
+            let span = open_token.span.merge(close_token.span);
+            // Update span to encompass `< ... >`
+            let full_type = match parsed_type {
+                Type::Named { name, .. } => Type::Named { name, span },
+                Type::Generic {
+                    name, type_args, ..
+                } => Type::Generic {
+                    name,
+                    type_args,
+                    span,
+                },
+                Type::Union { types, .. } => Type::Union { types, span },
+                Type::Reference { inner, is_mut, .. } => Type::Reference {
+                    inner,
+                    is_mut,
+                    span,
+                },
+            };
+            Some(full_type)
+        } else {
+            self.parse_type_expression()
+        }
     }
 
     fn parse_type_expression(&mut self) -> Option<Type> {
@@ -539,11 +549,12 @@ impl<'a> Parser<'a> {
 
         self.expect(&TokenKind::CloseParen, "expected ')' after parameters")?;
 
-        let return_type = if self.match_token(&TokenKind::Colon) {
-            Some(self.parse_type_annotation()?)
-        } else {
-            None
-        };
+        let return_type =
+            if self.match_token(&TokenKind::Arrow) || self.match_token(&TokenKind::Colon) {
+                Some(self.parse_type_annotation()?)
+            } else {
+                None
+            };
 
         let body = self.parse_block()?;
         let span = start_span.merge(body.span);
@@ -752,11 +763,12 @@ impl<'a> Parser<'a> {
 
                 self.expect(&TokenKind::CloseParen, "expected ')' after parameters")?;
 
-                let return_type = if self.match_token(&TokenKind::Colon) {
-                    Some(self.parse_type_annotation()?)
-                } else {
-                    None
-                };
+                let return_type =
+                    if self.match_token(&TokenKind::Arrow) || self.match_token(&TokenKind::Colon) {
+                        Some(self.parse_type_annotation()?)
+                    } else {
+                        None
+                    };
 
                 let body = if is_abstract || self.check(&TokenKind::Semicolon) {
                     if self.match_token(&TokenKind::Semicolon) {
@@ -896,11 +908,12 @@ impl<'a> Parser<'a> {
                 continue;
             }
 
-            let return_type = if self.match_token(&TokenKind::Colon) {
-                self.parse_type_annotation()
-            } else {
-                None
-            };
+            let return_type =
+                if self.match_token(&TokenKind::Arrow) || self.match_token(&TokenKind::Colon) {
+                    self.parse_type_annotation()
+                } else {
+                    None
+                };
 
             self.expect_semicolon();
             let end_span = self.previous().span;
@@ -1030,11 +1043,12 @@ impl<'a> Parser<'a> {
                 }
             }
             self.expect(&TokenKind::CloseParen, "expected ')' after parameters")?;
-            let return_type = if self.match_token(&TokenKind::Colon) {
-                Some(self.parse_type_annotation()?)
-            } else {
-                None
-            };
+            let return_type =
+                if self.match_token(&TokenKind::Arrow) || self.match_token(&TokenKind::Colon) {
+                    Some(self.parse_type_annotation()?)
+                } else {
+                    None
+                };
             self.expect_semicolon();
             let fn_span = fname.span;
             let end_span = return_type.as_ref().map(|t| t.span()).unwrap_or(fn_span);
@@ -1275,17 +1289,35 @@ impl<'a> Parser<'a> {
                     return None;
                 }
             };
-            self.expect(&TokenKind::Colon, "expected ':' for type annotation")?;
-            let type_annotation = self.parse_type_annotation()?;
-            let initializer = if self.match_token(&TokenKind::Eq) {
-                Some(self.parse_expression()?)
+            let (type_annotation, initializer) = if self.match_token(&TokenKind::Colon) {
+                let ty = self.parse_type_annotation()?;
+                let init = if self.match_token(&TokenKind::Eq) {
+                    Some(self.parse_expression()?)
+                } else {
+                    None
+                };
+                (Some(ty), init)
+            } else if self.match_token(&TokenKind::Eq) {
+                let init = self.parse_expression()?;
+                (None, Some(init))
             } else {
-                None
+                let span = self.peek().span;
+                self.diagnostics.error_with_help(
+                    span,
+                    format!(
+                        "expected ':' type annotation or '=' initializer for variable '{}'",
+                        name.name
+                    ),
+                    "NextLang requires explicit type annotations or initializers: e.g. 'tem i: Int32 = 0;' or 'tem i = 0;'",
+                );
+                return None;
             };
             let var_end = if let Some(ref init_expr) = initializer {
                 init_expr.span()
+            } else if let Some(ref ty) = type_annotation {
+                ty.span()
             } else {
-                type_annotation.span()
+                name.span
             };
             Some(Box::new(Stmt::VarDecl(VarDecl {
                 kind,

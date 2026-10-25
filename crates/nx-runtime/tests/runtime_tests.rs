@@ -487,3 +487,47 @@ async fn main():<VOID> {
     assert!(out.contains("server fd ready: true"));
     assert!(out.contains("tcp loopback closed"));
 }
+
+#[test]
+fn test_modern_syntax_execution() {
+    let src = r#"
+var age: Int32 = 25;
+const PI: Float64 = 3.14159;
+
+fn add(a: Int32, b: Int32) -> Int32 {
+    return a + b;
+}
+
+fn greet(name: String) -> Void {
+    vout("Hello", name);
+}
+
+class User {
+    var name: String;
+    var age: Int32;
+
+    fn init(name: String, age: Int32) -> Void {
+        self.name = name;
+        self.age = age;
+    }
+
+    fn introduce() -> Void {
+        vout("Hello, I am", self.name, "and age is", self.age);
+    }
+}
+
+var user = User("Alex", 25);
+user.introduce();
+
+var sum = add(age, 10);
+vout("sum is", sum);
+greet("NextLang");
+vout("PI is", PI);
+"#;
+    let (res, out) = run_nx(src);
+    assert!(res.is_ok(), "runtime error: {:?}", res.err());
+    assert!(out.contains("Hello, I am Alex and age is 25"));
+    assert!(out.contains("sum is 35"));
+    assert!(out.contains("Hello NextLang"));
+    assert!(out.contains("PI is 3.14159"));
+}

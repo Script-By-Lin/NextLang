@@ -410,12 +410,12 @@ pub struct OtherwiseBranch {
     pub span: Span,
 }
 
-/// Variable declaration: `var/const/tem name:<TYPE> = expr;`
+/// Variable declaration: `var/const/tem name[: TYPE] [= expr];`
 #[derive(Debug, Clone, PartialEq)]
 pub struct VarDecl {
     pub kind: VarKind,
     pub name: Ident,
-    pub type_annotation: Type,
+    pub type_annotation: Option<Type>,
     pub initializer: Option<Expr>,
     pub span: Span,
 }
@@ -797,7 +797,11 @@ impl AstFormatter {
                 ));
                 self.indent();
                 self.line(&format!("name: {}", var_decl.name.name));
-                self.line(&format!("type: <{}>", var_decl.type_annotation));
+                if let Some(ref ty) = var_decl.type_annotation {
+                    self.line(&format!("type: {}", ty));
+                } else {
+                    self.line("type: <inferred>");
+                }
                 if let Some(ref init) = var_decl.initializer {
                     self.line("initializer:");
                     self.indent();
@@ -991,13 +995,14 @@ impl AstFormatter {
                     match member {
                         ClassMember::Field(field) => {
                             let stat = if field.is_static { "static " } else { "" };
+                            let ty_str = if let Some(ref ty) = field.var_decl.type_annotation {
+                                format!("{}", ty)
+                            } else {
+                                "inferred".to_string()
+                            };
                             self.line(&format!(
-                                "Field {} {}{}: <{}> [{}]",
-                                field.access,
-                                stat,
-                                field.var_decl.name.name,
-                                field.var_decl.type_annotation,
-                                field.span
+                                "Field {} {}{}: {} [{}]",
+                                field.access, stat, field.var_decl.name.name, ty_str, field.span
                             ));
                             if let Some(ref init) = field.var_decl.initializer {
                                 self.indent();

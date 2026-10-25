@@ -355,3 +355,45 @@ async fn main() {
     assert!(success, "stderr: {}", stderr);
     assert!(stdout.contains("Native async result: 42"));
 }
+
+#[test]
+fn test_native_modern_syntax() {
+    let src = r#"
+var age: Int32 = 25;
+const PI: Float64 = 3.14159;
+
+fn add(a: Int32, b: Int32) -> Int32 {
+    return a + b;
+}
+
+fn greet(name: String) -> Void {
+    vout("Hello", name);
+}
+
+class User {
+    var name: String;
+    var age: Int32;
+
+    fn init(name: String, age: Int32) -> Void {
+        self.name = name;
+        self.age = age;
+        return;
+    }
+
+    fn introduce() -> Void {
+        vout("Hello, I am", self.name);
+    }
+}
+
+var user = User("Alex", 25);
+user.introduce();
+var sum = add(age, 10);
+vout("Sum:", sum);
+greet("LLVM");
+"#;
+    let (stdout, stderr, success) = compile_and_run(src, None);
+    assert!(success, "stderr: {}", stderr);
+    assert!(stdout.contains("Hello, I am Alex"));
+    assert!(stdout.contains("Sum: 35"));
+    assert!(stdout.contains("Hello LLVM"));
+}

@@ -108,3 +108,8 @@ fn test_differential_ownership() {
         Some("Successfully freed heap value!"),
     );
 }
+
+#[test]
+fn test_differential_modern_syntax() {
+    run_differential_test("examples/modern_syntax.nx", None);
+}

@@ -1,0 +1,35 @@
+// NextLang Modernized Syntax: Type Annotations, -> Return Types, and OOP
+
+fn add(a: Int32, b: Int32) -> Int32 {
+    return a + b;
+}
+
+fn greet(name: String) -> Void {
+    vout("Hello", name);
+}
+
+class User {
+    var name: String;
+    var age: Int32;
+
+    fn init(name: String, age: Int32) -> Void {
+        self.name = name;
+        self.age = age;
+        return;
+    }
+
+    fn introduce() -> Void {
+        vout("Hello, I am", self.name);
+    }
+}
+
+var age: Int32 = 25;
+const PI: Float64 = 3.14159;
+
+var user = User("Alex", 25);
+user.introduce();
+
+var total = add(age, 10);
+vout("Total:", total);
+greet("NextLang Modern");
+vout("PI:", PI);

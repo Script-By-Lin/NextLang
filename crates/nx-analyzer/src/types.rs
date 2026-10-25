@@ -62,21 +62,21 @@ impl SemType {
             AstType::Generic {
                 name, type_args, ..
             } => match name.as_str() {
-                "LIST" => {
+                "LIST" | "List" => {
                     let elem = type_args
                         .first()
                         .map(Self::from_ast)
                         .unwrap_or(SemType::Unknown);
                     SemType::List(Box::new(elem))
                 }
-                "SET" => {
+                "SET" | "Set" => {
                     let elem = type_args
                         .first()
                         .map(Self::from_ast)
                         .unwrap_or(SemType::Unknown);
                     SemType::Set(Box::new(elem))
                 }
-                "MAP" => {
+                "MAP" | "Map" => {
                     let key = type_args
                         .first()
                         .map(Self::from_ast)
@@ -87,12 +87,19 @@ impl SemType {
                         .unwrap_or(SemType::Unknown);
                     SemType::Map(Box::new(key), Box::new(val))
                 }
-                "FUTURE" | "TASK" => {
+                "FUTURE" | "Future" | "TASK" | "Task" => {
                     let elem = type_args
                         .first()
                         .map(Self::from_ast)
                         .unwrap_or(SemType::Unknown);
                     SemType::Future(Box::new(elem))
+                }
+                "HEAP" | "Heap" => {
+                    let elem = type_args
+                        .first()
+                        .map(Self::from_ast)
+                        .unwrap_or(SemType::Unknown);
+                    SemType::List(Box::new(elem))
                 }
                 _ => SemType::Custom(name.clone()),
             },
@@ -109,31 +116,31 @@ impl SemType {
 
     pub fn from_str_name(name: &str) -> Self {
         match name {
-            "INT8" => SemType::Int8,
-            "INT16" => SemType::Int16,
-            "INT32" => SemType::Int32,
-            "INT64" => SemType::Int64,
-            "INT128" => SemType::Int128,
+            "INT8" | "Int8" | "i8" => SemType::Int8,
+            "INT16" | "Int16" | "i16" => SemType::Int16,
+            "INT32" | "Int32" | "i32" | "Int" | "int" => SemType::Int32,
+            "INT64" | "Int64" | "i64" => SemType::Int64,
+            "INT128" | "Int128" | "i128" => SemType::Int128,
 
-            "UINT8" => SemType::Uint8,
-            "UINT16" => SemType::Uint16,
-            "UINT32" => SemType::Uint32,
-            "UINT64" => SemType::Uint64,
-            "UINT128" => SemType::Uint128,
+            "UINT8" | "Uint8" | "u8" | "Byte" | "byte" => SemType::Uint8,
+            "UINT16" | "Uint16" | "u16" => SemType::Uint16,
+            "UINT32" | "Uint32" | "u32" | "Uint" | "uint" => SemType::Uint32,
+            "UINT64" | "Uint64" | "u64" => SemType::Uint64,
+            "UINT128" | "Uint128" | "u128" => SemType::Uint128,
 
-            "USIZE" | "usize" => SemType::Usize,
-            "ISIZE" | "isize" => SemType::Isize,
-            "PTR" | "ptr" | "RAWPTR" => SemType::Ptr,
+            "USIZE" | "usize" | "Usize" => SemType::Usize,
+            "ISIZE" | "isize" | "Isize" => SemType::Isize,
+            "PTR" | "ptr" | "Ptr" | "RAWPTR" => SemType::Ptr,
 
-            "FL32" => SemType::Fl32,
-            "FL64" => SemType::Fl64,
-            "FL128" => SemType::Fl128,
+            "FL32" | "Float32" | "float32" | "f32" => SemType::Fl32,
+            "FL64" | "Float64" | "float64" | "f64" | "Float" | "float" => SemType::Fl64,
+            "FL128" | "Float128" | "float128" | "f128" => SemType::Fl128,
 
-            "BOOL" => SemType::Bool,
-            "CHAR" => SemType::Char,
-            "STRING" => SemType::String,
-            "ANY" => SemType::Any,
-            "VOID" => SemType::Void,
+            "BOOL" | "Bool" | "bool" | "Boolean" => SemType::Bool,
+            "CHAR" | "Char" | "char" => SemType::Char,
+            "STRING" | "String" | "string" => SemType::String,
+            "ANY" | "Any" | "any" => SemType::Any,
+            "VOID" | "Void" | "void" => SemType::Void,
             _ => SemType::Custom(name.to_string()),
         }
     }

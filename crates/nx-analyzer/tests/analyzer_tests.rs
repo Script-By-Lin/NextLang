@@ -1228,3 +1228,56 @@ async fn run(): <VOID> {
         .iter()
         .any(|d| d.code.as_deref() == Some("NX-OWN-004")));
 }
+
+#[test]
+fn test_modern_syntax_and_inference_valid() {
+    let src = r#"
+var age: Int32 = 25;
+const PI: Float64 = 3.14159;
+var x = 10;
+var s = "hello";
+
+fn add(a: Int32, b: Int32) -> Int32 {
+    return a + b;
+}
+
+fn greet(name: String) -> Void {
+    vout("Hello", name);
+}
+
+class User {
+    var name: String;
+    var age: Int32;
+
+    fn init(name: String, age: Int32) -> Void {
+        self.name = name;
+        self.age = age;
+    }
+
+    fn introduce() -> Void {
+        vout("Hello, I am", self.name);
+    }
+}
+
+var user = User("Alex", 25);
+user.introduce();
+"#;
+    let mut bag = DiagnosticBag::new();
+    let _ = analyze_source(src, &mut bag);
+    assert!(!bag.has_errors(), "diagnostics: {:?}", bag.diagnostics());
+}
+
+#[test]
+fn test_modern_syntax_inference_type_mismatch_rejected() {
+    let src = r#"
+var x = 10;
+x = "not an int";
+"#;
+    let mut bag = DiagnosticBag::new();
+    let _ = analyze_source(src, &mut bag);
+    assert!(bag.has_errors());
+    assert!(bag
+        .diagnostics()
+        .iter()
+        .any(|d| d.code.as_deref() == Some("NX-TYPE-001")));
+}

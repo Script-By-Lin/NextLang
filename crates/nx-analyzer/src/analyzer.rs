@@ -347,7 +347,22 @@ impl<'a> SemanticAnalyzer<'a> {
                             "each member name must be unique within a class",
                         );
                     }
-                    let ty = SemType::from_ast(&f.var_decl.type_annotation);
+                    let ty = if let Some(ref ann) = f.var_decl.type_annotation {
+                        SemType::from_ast(ann)
+                    } else if let Some(ref init) = f.var_decl.initializer {
+                        self.check_expr(init, None)
+                    } else {
+                        self.diagnostics.error_code_with_help(
+                            "NX-OOP-017",
+                            f.var_decl.name.span,
+                            format!(
+                                "field '{}' in class '{}' requires a type annotation",
+                                field_name, cls.name.name
+                            ),
+                            "provide a type annotation: e.g. 'var x: Int32;'",
+                        );
+                        SemType::Unknown
+                    };
                     fields.insert(
                         field_name.clone(),
                         ClassFieldSymbol {
@@ -802,7 +817,11 @@ impl<'a> SemanticAnalyzer<'a> {
             match member {
                 ClassMember::Field(f) => {
                     if let Some(ref init) = f.var_decl.initializer {
-                        let declared_t = SemType::from_ast(&f.var_decl.type_annotation);
+                        let declared_t = if let Some(ref ann) = f.var_decl.type_annotation {
+                            SemType::from_ast(ann)
+                        } else {
+                            self.check_expr(init, None)
+                        };
                         let init_t = self.check_expr(init, Some(&declared_t));
                         if !self.is_assignable(&init_t, &declared_t) {
                             self.diagnostics.error_code_with_help(
@@ -812,7 +831,7 @@ impl<'a> SemanticAnalyzer<'a> {
                                     "type mismatch in field '{}': expected {}, found {}",
                                     f.var_decl.name.name, declared_t, init_t
                                 ),
-                                format!("field is declared with type <{}>", declared_t),
+                                format!("field is declared with type {}", declared_t),
                             );
                         }
                     }
@@ -950,26 +969,52 @@ impl<'a> SemanticAnalyzer<'a> {
     }
 
     fn analyze_var_decl(&mut self, decl: &VarDecl) {
-        let declared_type = SemType::from_ast(&decl.type_annotation);
+        let declared_type = if let Some(ref type_ann) = decl.type_annotation {
+            let declared_type = SemType::from_ast(type_ann);
+            if let Some(ref init_expr) = decl.initializer {
+                let init_type = self.check_expr(init_expr, Some(&declared_type));
 
-        if let Some(ref init_expr) = decl.initializer {
-            let init_type = self.check_expr(init_expr, Some(&declared_type));
-
-            if !self.is_assignable(&init_type, &declared_type) {
+                if !self.is_assignable(&init_type, &declared_type) {
+                    self.diagnostics.error_code_with_help(
+                        "NX-TYPE-001",
+                        init_expr.span(),
+                        format!(
+                            "incompatible types in variable initialization: expected {}, found {}",
+                            declared_type, init_type
+                        ),
+                        format!(
+                            "variable '{}' has declared type <{}>",
+                            decl.name.name, declared_type
+                        ),
+                    );
+                }
+            }
+            declared_type
+        } else if let Some(ref init_expr) = decl.initializer {
+            let init_type = self.check_expr(init_expr, None);
+            if init_type == SemType::Unknown || init_type == SemType::Void {
                 self.diagnostics.error_code_with_help(
                     "NX-TYPE-001",
-                    init_expr.span(),
-                    format!(
-                        "incompatible types in variable initialization: expected {}, found {}",
-                        declared_type, init_type
-                    ),
-                    format!(
-                        "variable '{}' has declared type <{}>",
-                        decl.name.name, declared_type
-                    ),
+                    decl.name.span,
+                    format!("cannot infer type for variable '{}'", decl.name.name),
+                    "provide an explicit type annotation: e.g. 'var x: Int32 = ...;'",
                 );
+                SemType::Unknown
+            } else {
+                init_type
             }
-        }
+        } else {
+            self.diagnostics.error_code_with_help(
+                "NX-TYPE-001",
+                decl.name.span,
+                format!(
+                    "variable '{}' requires a type annotation or an initializer",
+                    decl.name.name
+                ),
+                "provide a type annotation or initializer: e.g. 'var x: Int32;' or 'var x = 10;'",
+            );
+            SemType::Unknown
+        };
 
         let is_mut = decl.kind != VarKind::Const;
         let is_tem = decl.kind == VarKind::Tem;

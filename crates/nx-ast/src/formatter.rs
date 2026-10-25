@@ -59,10 +59,15 @@ impl SourceFormatter {
                 } else {
                     String::new()
                 };
+                let type_str = if let Some(ref ty) = decl.type_annotation {
+                    format!(": {}", ty)
+                } else {
+                    String::new()
+                };
                 let _ = writeln!(
                     self.output,
-                    "{}{} {}:<{}>{};",
-                    ind, kw, decl.name.name, decl.type_annotation, init_str
+                    "{}{} {}{}{};",
+                    ind, kw, decl.name.name, type_str, init_str
                 );
             }
             Stmt::Assignment(assign) => {
@@ -84,13 +89,13 @@ impl SourceFormatter {
             }
             Stmt::FunctionDecl(f) => {
                 let ret = match &f.return_type {
-                    Some(t) => format!(":<{}>", t),
-                    None => ":<VOID>".to_string(),
+                    Some(t) => format!(" -> {}", t),
+                    None => " -> Void".to_string(),
                 };
                 let params: Vec<String> = f
                     .params
                     .iter()
-                    .map(|p| format!("{}:<{}>", p.name.name, p.type_annotation))
+                    .map(|p| format!("{}: {}", p.name.name, p.type_annotation))
                     .collect();
                 let async_prefix = if f.is_async { "async " } else { "" };
                 let _ = writeln!(
@@ -239,15 +244,20 @@ impl SourceFormatter {
                             } else {
                                 String::new()
                             };
+                            let type_str = if let Some(ref ty) = f.var_decl.type_annotation {
+                                format!(": {}", ty)
+                            } else {
+                                String::new()
+                            };
                             let _ = writeln!(
                                 self.output,
-                                "{}{} {}{} {}:<{}>{};",
+                                "{}{} {}{} {}{}{};",
                                 self.indent_str(),
                                 f.access,
                                 stat,
                                 f.var_decl.kind.as_str(),
                                 f.var_decl.name.name,
-                                f.var_decl.type_annotation,
+                                type_str,
                                 init_str
                             );
                         }
@@ -261,14 +271,14 @@ impl SourceFormatter {
                                 ""
                             };
                             let ret = match &m.function.return_type {
-                                Some(t) => format!(":<{}>", t),
-                                None => ":<VOID>".to_string(),
+                                Some(t) => format!(" -> {}", t),
+                                None => " -> Void".to_string(),
                             };
                             let params: Vec<String> = m
                                 .function
                                 .params
                                 .iter()
-                                .map(|p| format!("{}:<{}>", p.name.name, p.type_annotation))
+                                .map(|p| format!("{}: {}", p.name.name, p.type_annotation))
                                 .collect();
                             if m.is_abstract {
                                 let _ = writeln!(
@@ -316,13 +326,13 @@ impl SourceFormatter {
                 self.indent_level += 1;
                 for m in &iface.methods {
                     let ret = match &m.return_type {
-                        Some(t) => format!(":<{}>", t),
-                        None => ":<VOID>".to_string(),
+                        Some(t) => format!(" -> {}", t),
+                        None => " -> Void".to_string(),
                     };
                     let params: Vec<String> = m
                         .params
                         .iter()
-                        .map(|p| format!("{}:<{}>", p.name.name, p.type_annotation))
+                        .map(|p| format!("{}: {}", p.name.name, p.type_annotation))
                         .collect();
                     let _ = writeln!(
                         self.output,
@@ -343,7 +353,7 @@ impl SourceFormatter {
                     let comma = if i + 1 < s.fields.len() { "," } else { "" };
                     let _ = writeln!(
                         self.output,
-                        "{}{}:<{}>{}",
+                        "{}{}: {}{}",
                         self.indent_str(),
                         f.name.name,
                         f.field_type,
@@ -367,13 +377,13 @@ impl SourceFormatter {
                 self.indent_level += 1;
                 for f in &e.functions {
                     let ret = match &f.return_type {
-                        Some(t) => format!(":<{}>", t),
-                        None => ":<VOID>".to_string(),
+                        Some(t) => format!(" -> {}", t),
+                        None => " -> Void".to_string(),
                     };
                     let params: Vec<String> = f
                         .params
                         .iter()
-                        .map(|p| format!("{}:<{}>", p.name.name, p.type_annotation))
+                        .map(|p| format!("{}: {}", p.name.name, p.type_annotation))
                         .collect();
                     let _ = writeln!(
                         self.output,
@@ -579,10 +589,10 @@ mod tests {
                         statements: vec![Stmt::VarDecl(VarDecl {
                             kind: VarKind::Var,
                             name: Ident::new("x", Span::new(0, 0)),
-                            type_annotation: Type::Named {
+                            type_annotation: Some(Type::Named {
                                 name: "INT".to_string(),
                                 span: Span::new(0, 0),
-                            },
+                            }),
                             initializer: Some(Expr::Literal(Literal::Integer {
                                 value: 42,
                                 raw: "42".to_string(),
@@ -601,6 +611,6 @@ mod tests {
         let formatted = format_source(&program);
         assert!(formatted.contains("import math;"));
         assert!(formatted.contains("test \"basic addition\" {"));
-        assert!(formatted.contains("var x:<INT> = 42;"));
+        assert!(formatted.contains("var x: INT = 42;"));
     }
 }

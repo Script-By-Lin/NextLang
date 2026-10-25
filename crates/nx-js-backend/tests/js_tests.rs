@@ -234,3 +234,45 @@ async fn main():<VOID> {
     assert!(success, "node error: {}", stderr);
     assert!(stdout.contains("Message: Async JS Hello"));
 }
+
+#[test]
+fn test_compile_modern_syntax() {
+    let src = r#"
+var age: Int32 = 25;
+const PI: Float64 = 3.14159;
+
+fn add(a: Int32, b: Int32) -> Int32 {
+    return a + b;
+}
+
+fn greet(name: String) -> Void {
+    vout("Hello", name);
+}
+
+class User {
+    var name: String;
+    var age: Int32;
+
+    fn init(name: String, age: Int32) -> Void {
+        self.name = name;
+        self.age = age;
+    }
+
+    fn introduce() -> Void {
+        vout("Hello, I am", self.name);
+    }
+}
+
+var user = User("Alex", 25);
+user.introduce();
+var sum = add(age, 10);
+vout("Sum:", sum);
+greet("JS");
+"#;
+    let js = compile_to_js(src).expect("compilation failed");
+    let (stdout, stderr, success) = run_node(&js, None);
+    assert!(success, "node error: {}", stderr);
+    assert!(stdout.contains("Hello, I am Alex"));
+    assert!(stdout.contains("Sum: 35"));
+    assert!(stdout.contains("Hello JS"));
+}
