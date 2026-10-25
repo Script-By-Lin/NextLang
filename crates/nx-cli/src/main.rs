@@ -535,6 +535,49 @@ fn cmd_run(path: &Path, time_flag: bool) -> Result<(), ()> {
     }
 }
 
+fn print_nextapi_dev_banner(entry: &str, host: &str, port: &str) {
+    let title = "  NextAPI Development Server (nx api dev)";
+    let local = format!("http://{}:{}", host, port);
+    let swagger = format!("http://{}:{}/docs", host, port);
+    let redoc = format!("http://{}:{}/redoc", host, port);
+    let openapi = format!("http://{}:{}/openapi.json", host, port);
+
+    let rows = [
+        ("  • Entry point : ", entry.to_string()),
+        ("  • Local       : ", local),
+        ("  • Swagger UI  : ", swagger),
+        ("  • ReDoc       : ", redoc),
+        ("  • OpenAPI     : ", openapi),
+    ];
+
+    let mut inner_width = 60usize;
+    if title.chars().count() > inner_width {
+        inner_width = title.chars().count();
+    }
+    for (prefix, val) in &rows {
+        let len = prefix.chars().count() + val.chars().count();
+        if len > inner_width {
+            inner_width = len;
+        }
+    }
+
+    let top_border = format!("╭{}╮", "─".repeat(inner_width));
+    let divider = format!("├{}┤", "─".repeat(inner_width));
+    let bottom_border = format!("╰{}╯", "─".repeat(inner_width));
+
+    println!("{}", top_border);
+    let title_pad = inner_width.saturating_sub(title.chars().count());
+    println!("│{}{}│", title, " ".repeat(title_pad));
+    println!("{}", divider);
+
+    for (prefix, val) in &rows {
+        let content = format!("{}{}", prefix, val);
+        let pad = inner_width.saturating_sub(content.chars().count());
+        println!("│{}{}│", content, " ".repeat(pad));
+    }
+    println!("{}", bottom_border);
+}
+
 fn cmd_api_dev(
     entry_path: Option<&str>,
     host_opt: Option<&str>,
@@ -552,7 +595,7 @@ fn cmd_api_dev(
     let cur_dir = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let proj_root = package::find_project_root(&cur_dir)
         .or_else(|| path.parent().map(|p| p.to_path_buf()))
-        .unwrap_or(cur_dir);
+        .unwrap_or(cur_dir.clone());
 
     let manifest_path = proj_root.join("nextlang.toml");
     let manifest_run = if let Ok(content) = fs::read_to_string(&manifest_path) {
@@ -571,24 +614,23 @@ fn cmd_api_dev(
     let port = port_opt.unwrap_or(&default_port_str);
     let should_reload = reload || manifest_run.as_ref().map(|r| r.reload).unwrap_or(false);
 
+    let entry_display = entry_path.unwrap_or_else(|| {
+        path.strip_prefix(&cur_dir)
+            .ok()
+            .and_then(|p| p.to_str())
+            .unwrap_or_else(|| path.to_str().unwrap_or("src/main.nx"))
+    });
+
+    print_nextapi_dev_banner(entry_display, host, port);
+
+    std::env::set_var("APP_HOST", host);
+    std::env::set_var("APP_PORT", port);
+    std::env::set_var("NEXTAPI_SILENT_BANNER", "1");
+
     if should_reload {
         return reload::run_with_reload(&proj_root, &path, Some(host), Some(port));
     }
 
-    println!("============================================================");
-    println!("  NextAPI Development Server (nx api dev)");
-    println!("  Entry point: {}", path.display());
-    println!("  Target: http://{}:{}", host, port);
-    println!("  Interactive Swagger UI: http://{}:{}/docs", host, port);
-    println!("  ReDoc: http://{}:{}/redoc", host, port);
-    println!(
-        "  OpenAPI Specification: http://{}:{}/openapi.json",
-        host, port
-    );
-    println!("============================================================");
-
-    std::env::set_var("APP_HOST", host);
-    std::env::set_var("APP_PORT", port);
     cmd_run(&path, false)
 }
 

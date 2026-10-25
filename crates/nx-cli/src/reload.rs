@@ -101,6 +101,9 @@ pub fn spawn_app_process(
     if let Some(p) = port {
         cmd.env("APP_PORT", p);
     }
+    if env::var("NEXTAPI_SILENT_BANNER").is_ok() {
+        cmd.env("NEXTAPI_SILENT_BANNER", "1");
+    }
     cmd.spawn()
 }
 
@@ -111,15 +114,11 @@ pub fn run_with_reload(
     host: Option<&str>,
     port: Option<&str>,
 ) -> Result<(), ()> {
-    println!("============================================================");
-    println!("  NextLang Development Reload Supervisor Enabled");
-    println!("  Watching directory: {}", watch_root.display());
-    println!("  Entry point: {}", entry_path.display());
-    if let (Some(h), Some(p)) = (host, port) {
-        println!("  Target: http://{}:{}", h, p);
+    if env::var("NEXTAPI_SILENT_BANNER").is_err() {
+        println!("[NextLang Reload] Watching directory: {}", watch_root.display());
+        println!("[NextLang Reload] Entry point: {}", entry_path.display());
     }
-    println!("  Press Ctrl+C to stop.");
-    println!("============================================================");
+    println!("[NextAPI Reload] Press Ctrl+C to stop.");
 
     let (tx, rx) = channel::<notify::Result<Event>>();
     let mut watcher = match RecommendedWatcher::new(

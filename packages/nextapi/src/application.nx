@@ -272,26 +272,30 @@ class NextAPI {
             eff_host = env_h;
         }
 
-        var eff_port: Int32 = port;
+        var eff_port_str: String = int_to_str(port);
         var env_p: String = env_get("APP_PORT");
         if str_len(env_p) > 0 {
-            eff_port = to_int(env_p);
+            eff_port_str = env_p;
         }
 
-        var addr: String = eff_host + ":" + int_to_str(eff_port);
+        var addr: String = eff_host + ":" + eff_port_str;
         var server_fd: Int64 = await tcp_listen(addr);
         if server_fd < 0 {
             vout("[NextAPI Error] Failed to bind server on " + addr);
             return;
         }
 
-        vout("+------------------------------------------------------------+");
-        vout("|  NextAPI Server Running                                    |");
-        vout("|  Address: http://" + eff_host + ":" + int_to_str(eff_port) + "                        |");
-        vout("|  Interactive Docs: http://" + eff_host + ":" + int_to_str(eff_port) + self.docs_url + "                  |");
-        vout("|  ReDoc: http://" + eff_host + ":" + int_to_str(eff_port) + self.redoc_url + "                 |");
-        vout("|  OpenAPI JSON: http://" + eff_host + ":" + int_to_str(eff_port) + self.openapi_url + "          |");
-        vout("+------------------------------------------------------------+");
+        var silent_banner: String = env_get("NEXTAPI_SILENT_BANNER");
+        if str_len(silent_banner) == 0 {
+            vout("╭────────────────────────────────────────────────────────────╮");
+            vout("│  NextAPI Server Running                                    │");
+            vout("├────────────────────────────────────────────────────────────┤");
+            vout("│  • Local       : http://" + eff_host + ":" + eff_port_str);
+            vout("│  • Swagger UI  : http://" + eff_host + ":" + eff_port_str + self.docs_url);
+            vout("│  • ReDoc       : http://" + eff_host + ":" + eff_port_str + self.redoc_url);
+            vout("│  • OpenAPI     : http://" + eff_host + ":" + eff_port_str + self.openapi_url);
+            vout("╰────────────────────────────────────────────────────────────╯");
+        }
 
         self.lifecycle.trigger_startup();
 
