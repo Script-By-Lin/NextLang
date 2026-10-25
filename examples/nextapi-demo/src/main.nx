@@ -3,7 +3,7 @@
 
 import nextapi;
 
-fn main() -> Void {
+async fn main() -> Void {
     var app: NextAPI = NextAPI("NextAPI Showcase API", "1.0.0", "Interactive Async REST API built with NextLang");
 
     // Root Welcome Endpoint
@@ -24,12 +24,9 @@ fn main() -> Void {
     // Mount modular router
     app.include_router(v1);
 
-    vout("[NextAPI Demo] Starting server at http://127.0.0.1:8000");
-    vout("[NextAPI Demo] Open http://127.0.0.1:8000/docs for Swagger UI interactive testing");
-    vout("[NextAPI Demo] Open http://127.0.0.1:8000/redoc for ReDoc interface");
-    vout("[NextAPI Demo] Open http://127.0.0.1:8000/openapi.json for OpenAPI 3.0.3 specification");
-
+    await app.run("127.0.0.1", 8000);
     return;
 }
 
 main();
+
