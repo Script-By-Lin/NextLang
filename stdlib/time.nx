@@ -1,0 +1,10 @@
+// NextLang Standard Library: time
+// Time measurement, duration, and sleeping
+
+fn now_ms():<INT64> {
+    return time_now_ms();
+}
+
+fn sleep_ms(ms:<INT64>):<VOID> {
+    time_sleep_ms(ms);
+}

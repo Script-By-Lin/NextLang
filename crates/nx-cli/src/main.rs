@@ -1,9 +1,11 @@
+mod package;
+
 use nx_ast::AstFormatter;
-use nx_codegen::{compile_source_to_executable, CodegenConfig};
+use nx_codegen::{compile_source_with_modules_to_executable, CodegenConfig};
 use nx_diagnostics::{DiagnosticBag, SourceFile};
 use nx_lexer::Lexer;
 use nx_nir::{optimize_module, print_module, AstLowering, OptLevel};
-use nx_parser::parse_source;
+use nx_parser::{parse_source, parse_source_with_modules};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -19,43 +21,40 @@ fn print_help() {
 Usage:
     nx <command> [options] [arguments]
 
-Commands:
-    run <file.nx> [--time]   Execute source file via the NextLang runtime engine
-    build <file.nx> [-o <out>] [--opt-level <0|1|2|3>] [--dump-nir] [--time]
-                             Compile source file to a standalone native ELF executable
-    run-native <file|binary> [--time]
-                             Compile and run source natively or execute native binary
-    dump-nir <file.nx> [--opt-level <0|1|2|3>]
-                             Dump NextLang typed Intermediate Representation (NIR)
-    dump-llvm <file.nx> [--opt-level <0|1|2|3>]
-                             Dump generated LLVM IR (.ll) representation
-    compile-js <file.nx> [-o <out.js>] [--target node|browser] [--stdout]
-                             Compile source file to executable JavaScript
+Project & Package Commands:
+    init [dir]               Initialize a new NextLang package in current or specified directory
+    new <name>               Create a new NextLang package directory with template
+    add <pkg> [opts]         Add a dependency (options: --path <dir>, --git <url>, --version <ver>)
+    remove <pkg>             Remove a dependency from manifest and lockfile
+    update                   Re-resolve dependencies and update nextlang.lock
+    tree                     Display project dependency tree
+
+Developer Ecosystem:
+    fmt [paths...] [--check] Format NextLang source code (or verify with --check)
+    test [path] [--filter f] Discover and execute NextLang unit tests
+
+Build & Execution:
+    run [file.nx] [--time]   Execute source file or project entry point via NextLang runtime
+    build [file.nx] [opts]   Compile source or project to a native executable or JS
+                             Opts: -o <out>, --target <native|js>, --opt-level <0|1|2|3>, --dump-nir, --emit-llvm, --time
+    run-native <file|binary> Compile and run source natively or execute native binary
+    check [file.nx]          Validate source file or project for errors
+    compile-js [file.nx]     Compile source file to executable JavaScript (-o <out.js>, --target node|browser)
+
+Inspection & Debugging:
+    dump-nir <file.nx>       Dump NextLang typed Intermediate Representation (NIR)
+    dump-llvm <file.nx>      Dump generated LLVM IR (.ll) representation
     tokenize <file.nx>       Tokenize source file and display token stream
     parse <file.nx>          Parse source file and display abstract syntax tree (AST)
-    check <file.nx>          Validate source file for lexical, syntactic, and semantic errors
     --version, -V            Print version information
     --help, -h               Print this help message
 
-Options:
-    --time                   Measure and display execution duration to stderr
-    -o, --output <file>      Specify output binary or JavaScript file path
-    --opt-level <0|1|2|3>    Optimization level for native codegen (default: 0)
-    --dump-nir               Dump intermediate NIR during compilation
-    --emit-llvm              Emit LLVM IR during native compilation
-    --target <node|browser>  Target JS platform (default: node)
-    --stdout                 Output generated JavaScript to stdout
-
 Examples:
-    nx run examples/hello.nx
-    nx build examples/hello.nx -o hello
-    nx run-native examples/hello.nx
-    nx run-native hello --time
-    nx dump-nir examples/hello.nx --opt-level 2
-    nx compile-js examples/hello.nx -o dist/hello.js
-    nx tokenize examples/hello.nx
-    nx parse examples/hello.nx
-    nx check examples/hello.nx
+    nx new my-project
+    cd my-project && nx run
+    nx test
+    nx fmt --check
+    nx build --target native -o my-app
 "#
     );
 }
@@ -76,14 +75,362 @@ pub fn format_duration(duration: Duration) -> String {
     }
 }
 
-fn read_source_file(path: &str) -> Result<SourceFile, String> {
+fn read_source_file(path: &Path) -> Result<SourceFile, String> {
     match fs::read_to_string(path) {
-        Ok(content) => Ok(SourceFile::new(path, content)),
-        Err(err) => Err(format!("error: failed to read file '{}': {}", path, err)),
+        Ok(content) => Ok(SourceFile::new(path.to_string_lossy().as_ref(), content)),
+        Err(err) => Err(format!(
+            "error: failed to read file '{}': {}",
+            path.display(),
+            err
+        )),
     }
 }
 
-fn cmd_tokenize(path: &str) -> Result<(), ()> {
+fn resolve_entry_path(specified_path: Option<&str>) -> Result<PathBuf, String> {
+    if let Some(p) = specified_path {
+        return Ok(PathBuf::from(p));
+    }
+    let cur_dir = env::current_dir().map_err(|e| format!("{}", e))?;
+    if let Some(root) = package::find_project_root(&cur_dir) {
+        let manifest_path = root.join("nextlang.toml");
+        if let Ok(content) = fs::read_to_string(&manifest_path) {
+            if let Ok(manifest) = package::Manifest::parse(&content) {
+                let entry = root.join(&manifest.build.entry);
+                if entry.exists() {
+                    return Ok(entry);
+                } else {
+                    return Err(format!(
+                        "error: project entry point '{}' not found",
+                        entry.display()
+                    ));
+                }
+            }
+        }
+    }
+    Err("error: no source file specified and no `nextlang.toml` found in current or parent directories".to_string())
+}
+
+fn cmd_init(dir_arg: Option<&str>) -> Result<(), ()> {
+    let target = match dir_arg {
+        Some(d) => PathBuf::from(d),
+        None => env::current_dir().map_err(|e| {
+            eprintln!("error: failed to get current directory: {}", e);
+        })?,
+    };
+    package::init_project(&target).map_err(|e| {
+        eprintln!("{}", e);
+    })
+}
+
+fn cmd_new(name: &str) -> Result<(), ()> {
+    package::new_project(name).map_err(|e| {
+        eprintln!("{}", e);
+    })
+}
+
+fn cmd_add(
+    pkg: &str,
+    path: Option<&str>,
+    git: Option<&str>,
+    version: Option<&str>,
+) -> Result<(), ()> {
+    let cur_dir = env::current_dir().map_err(|e| eprintln!("error: {}", e))?;
+    let proj_root = package::find_project_root(&cur_dir).unwrap_or(cur_dir);
+    package::add_dependency(&proj_root, pkg, path, git, version).map_err(|e| eprintln!("{}", e))
+}
+
+fn cmd_remove(pkg: &str) -> Result<(), ()> {
+    let cur_dir = env::current_dir().map_err(|e| eprintln!("error: {}", e))?;
+    let proj_root = package::find_project_root(&cur_dir).unwrap_or(cur_dir);
+    package::remove_dependency(&proj_root, pkg).map_err(|e| eprintln!("{}", e))
+}
+
+fn cmd_update() -> Result<(), ()> {
+    let cur_dir = env::current_dir().map_err(|e| eprintln!("error: {}", e))?;
+    let proj_root = package::find_project_root(&cur_dir).unwrap_or(cur_dir);
+    package::update_lockfile(&proj_root).map_err(|e| eprintln!("{}", e))
+}
+
+fn cmd_tree() -> Result<(), ()> {
+    let cur_dir = env::current_dir().map_err(|e| eprintln!("error: {}", e))?;
+    let proj_root = package::find_project_root(&cur_dir).unwrap_or(cur_dir);
+    package::print_tree(&proj_root).map_err(|e| eprintln!("{}", e))
+}
+
+fn collect_nx_files(dir: &Path, out: &mut Vec<PathBuf>) {
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with('.')
+                || name == "target"
+                || name == "dist"
+                || name == "node_modules"
+                || name == ".nx_cache"
+            {
+                continue;
+            }
+            if p.is_dir() {
+                collect_nx_files(&p, out);
+            } else if p.is_file() && p.extension().is_some_and(|ext| ext == "nx") {
+                out.push(p);
+            }
+        }
+    }
+}
+
+fn cmd_fmt(paths: &[String], check_mode: bool) -> Result<(), ()> {
+    let mut files_to_format = Vec::new();
+    if paths.is_empty() {
+        let cur_dir = env::current_dir().map_err(|e| eprintln!("error: {}", e))?;
+        let root = package::find_project_root(&cur_dir).unwrap_or(cur_dir);
+        collect_nx_files(&root, &mut files_to_format);
+    } else {
+        for p in paths {
+            let path = Path::new(p);
+            if path.is_file() {
+                files_to_format.push(path.to_path_buf());
+            } else if path.is_dir() {
+                collect_nx_files(path, &mut files_to_format);
+            }
+        }
+    }
+
+    files_to_format.sort();
+
+    if files_to_format.is_empty() {
+        println!("No .nx files found to format.");
+        return Ok(());
+    }
+
+    let mut unformatted_count = 0;
+    let mut parse_error = false;
+
+    for file_path in &files_to_format {
+        let content = match fs::read_to_string(file_path) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("error: failed to read '{}': {}", file_path.display(), e);
+                parse_error = true;
+                continue;
+            }
+        };
+
+        let mut diagnostics = DiagnosticBag::new();
+        let program = parse_source(&content, &mut diagnostics);
+        if diagnostics.has_errors() {
+            let src_file = SourceFile::new(file_path.to_string_lossy().as_ref(), content);
+            eprint!("{}", diagnostics.render_all(&src_file));
+            parse_error = true;
+            continue;
+        }
+
+        let formatted = nx_ast::format_source(&program);
+        if formatted != content {
+            if check_mode {
+                println!("Diff in {}", file_path.display());
+                unformatted_count += 1;
+            } else if let Err(e) = fs::write(file_path, &formatted) {
+                eprintln!("error: failed to write '{}': {}", file_path.display(), e);
+                parse_error = true;
+            } else {
+                println!("Formatted {}", file_path.display());
+            }
+        }
+    }
+
+    if parse_error {
+        return Err(());
+    }
+
+    if check_mode {
+        if unformatted_count > 0 {
+            eprintln!(
+                "{} file(s) need formatting. Run 'nx fmt' to format.",
+                unformatted_count
+            );
+            return Err(());
+        } else {
+            println!(
+                "All {} file(s) are correctly formatted.",
+                files_to_format.len()
+            );
+        }
+    }
+
+    Ok(())
+}
+
+fn collect_test_files(dir: &Path, out: &mut Vec<PathBuf>) {
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with('.')
+                || name == "target"
+                || name == "dist"
+                || name == ".nx_cache"
+                || name == "node_modules"
+            {
+                continue;
+            }
+            if p.is_dir() {
+                collect_test_files(&p, out);
+            } else if p.is_file()
+                && p.extension().is_some_and(|ext| ext == "nx")
+                && (name.ends_with("_test.nx") || dir.ends_with("tests"))
+            {
+                out.push(p);
+            }
+        }
+    }
+}
+
+fn cmd_test(path_arg: Option<&str>, filter_opt: Option<&str>) -> Result<(), ()> {
+    let mut test_files = Vec::new();
+
+    if let Some(p) = path_arg {
+        let path = Path::new(p);
+        if path.is_file() {
+            test_files.push(path.to_path_buf());
+        } else if path.is_dir() {
+            collect_test_files(path, &mut test_files);
+        } else {
+            eprintln!("error: test path '{}' does not exist", p);
+            return Err(());
+        }
+    } else {
+        let cur_dir = env::current_dir().map_err(|e| eprintln!("error: {}", e))?;
+        let root = package::find_project_root(&cur_dir).unwrap_or(cur_dir);
+        let tests_dir = root.join("tests");
+        if tests_dir.is_dir() {
+            collect_test_files(&tests_dir, &mut test_files);
+        }
+        let src_dir = root.join("src");
+        if src_dir.is_dir() {
+            collect_test_files(&src_dir, &mut test_files);
+        }
+    }
+
+    test_files.sort();
+
+    if test_files.is_empty() {
+        println!("No tests found.");
+        return Ok(());
+    }
+
+    let mut total_passed = 0;
+    let mut total_failed = 0;
+    let mut total_filtered = 0;
+    let start_all = Instant::now();
+
+    for test_file in &test_files {
+        let content = match fs::read_to_string(test_file) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!(
+                    "error: failed to read test file '{}': {}",
+                    test_file.display(),
+                    e
+                );
+                total_failed += 1;
+                continue;
+            }
+        };
+
+        let mut diagnostics = DiagnosticBag::new();
+        let program = parse_source_with_modules(test_file, &content, &mut diagnostics);
+        if diagnostics.has_errors() {
+            let src_file = SourceFile::new(test_file.to_string_lossy().as_ref(), content);
+            eprint!("{}", diagnostics.render_all(&src_file));
+            total_failed += 1;
+            continue;
+        }
+
+        let mut test_decls = Vec::new();
+        let mut non_test_stmts = Vec::new();
+
+        for stmt in program.statements {
+            if let nx_ast::Stmt::TestDecl(t) = stmt {
+                test_decls.push(t);
+            } else {
+                non_test_stmts.push(stmt);
+            }
+        }
+
+        if test_decls.is_empty() {
+            let test_name = test_file
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("test");
+            if let Some(pattern) = filter_opt {
+                if !test_name.contains(pattern) {
+                    total_filtered += 1;
+                    continue;
+                }
+            }
+
+            print!("test {} ... ", test_name);
+            let single_prog = nx_ast::Program::new(non_test_stmts, program.span);
+            match nx_runtime::eval_program_captured(&single_prog) {
+                Ok(_) => {
+                    println!("ok");
+                    total_passed += 1;
+                }
+                Err(err) => {
+                    println!("FAILED");
+                    eprintln!("  Error: {}", err);
+                    total_failed += 1;
+                }
+            }
+        } else {
+            for test_decl in test_decls {
+                if let Some(pattern) = filter_opt {
+                    if !test_decl.name.contains(pattern) {
+                        total_filtered += 1;
+                        continue;
+                    }
+                }
+
+                print!("test \"{}\" ... ", test_decl.name);
+                let mut stmts = non_test_stmts.clone();
+                stmts.extend(test_decl.body.statements);
+                let test_prog = nx_ast::Program::new(stmts, test_decl.span);
+
+                match nx_runtime::eval_program_captured(&test_prog) {
+                    Ok(_) => {
+                        println!("ok");
+                        total_passed += 1;
+                    }
+                    Err(err) => {
+                        println!("FAILED");
+                        eprintln!("  Error: {}", err);
+                        total_failed += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    let elapsed = start_all.elapsed();
+    let status = if total_failed == 0 { "ok" } else { "FAILED" };
+    println!(
+        "\ntest result: {}. {} passed; {} failed; {} filtered out; finished in {}",
+        status,
+        total_passed,
+        total_failed,
+        total_filtered,
+        format_duration(elapsed)
+    );
+
+    if total_failed > 0 {
+        Err(())
+    } else {
+        Ok(())
+    }
+}
+
+fn cmd_tokenize(path: &Path) -> Result<(), ()> {
     let file = read_source_file(path).map_err(|err| {
         eprintln!("{}", err);
     })?;
@@ -106,7 +453,7 @@ fn cmd_tokenize(path: &str) -> Result<(), ()> {
     Ok(())
 }
 
-fn cmd_parse(path: &str) -> Result<(), ()> {
+fn cmd_parse(path: &Path) -> Result<(), ()> {
     let file = read_source_file(path).map_err(|err| {
         eprintln!("{}", err);
     })?;
@@ -125,13 +472,13 @@ fn cmd_parse(path: &str) -> Result<(), ()> {
     Ok(())
 }
 
-fn cmd_check(path: &str) -> Result<(), ()> {
+fn cmd_check(path: &Path) -> Result<(), ()> {
     let file = read_source_file(path).map_err(|err| {
         eprintln!("{}", err);
     })?;
 
     let mut diagnostics = DiagnosticBag::new();
-    let program = parse_source(&file.content, &mut diagnostics);
+    let program = parse_source_with_modules(path, &file.content, &mut diagnostics);
 
     if !diagnostics.has_errors() {
         nx_analyzer::analyze(&program, &mut diagnostics);
@@ -146,13 +493,13 @@ fn cmd_check(path: &str) -> Result<(), ()> {
     Ok(())
 }
 
-fn cmd_run(path: &str, time_flag: bool) -> Result<(), ()> {
+fn cmd_run(path: &Path, time_flag: bool) -> Result<(), ()> {
     let file = read_source_file(path).map_err(|err| {
         eprintln!("{}", err);
     })?;
 
     let mut diagnostics = DiagnosticBag::new();
-    let program = parse_source(&file.content, &mut diagnostics);
+    let program = parse_source_with_modules(path, &file.content, &mut diagnostics);
 
     if !diagnostics.has_errors() {
         nx_analyzer::analyze(&program, &mut diagnostics);
@@ -163,12 +510,10 @@ fn cmd_run(path: &str, time_flag: bool) -> Result<(), ()> {
         return Err(());
     }
 
-    // Monotonic elapsed-time measurement immediately around execution
     let start_time = Instant::now();
     let run_res = nx_runtime::eval_program(&program);
     let elapsed = start_time.elapsed();
 
-    // Duration displayed after program output, to stderr by default
     if time_flag {
         eprintln!("Execution time: {}", format_duration(elapsed));
     }
@@ -183,7 +528,7 @@ fn cmd_run(path: &str, time_flag: bool) -> Result<(), ()> {
 }
 
 fn cmd_compile_js(
-    path: &str,
+    path: &Path,
     output_path: Option<&str>,
     target: nx_js_backend::JsTarget,
     to_stdout: bool,
@@ -193,7 +538,7 @@ fn cmd_compile_js(
     })?;
 
     let mut diagnostics = DiagnosticBag::new();
-    let program = parse_source(&file.content, &mut diagnostics);
+    let program = parse_source_with_modules(path, &file.content, &mut diagnostics);
 
     if !diagnostics.has_errors() {
         nx_analyzer::analyze(&program, &mut diagnostics);
@@ -213,11 +558,8 @@ fn cmd_compile_js(
     }
 
     let out_file = match output_path {
-        Some(p) => std::path::PathBuf::from(p),
-        None => {
-            let p = std::path::Path::new(path);
-            p.with_extension("js")
-        }
+        Some(p) => PathBuf::from(p),
+        None => path.with_extension("js"),
     };
 
     if let Some(parent) = out_file.parent() {
@@ -235,18 +577,23 @@ fn cmd_compile_js(
         return Err(());
     }
 
-    println!("Compiled '{}' -> '{}'", path, out_file.display());
+    println!("Compiled '{}' -> '{}'", path.display(), out_file.display());
     Ok(())
 }
 
 fn cmd_build(
-    path: &str,
+    path: &Path,
     output_path: Option<&str>,
+    target: &str,
     opt_level: OptLevel,
     dump_nir: bool,
     emit_llvm: bool,
     time: bool,
 ) -> Result<(), ()> {
+    if target == "js" {
+        return cmd_compile_js(path, output_path, nx_js_backend::JsTarget::Node, false);
+    }
+
     let start_time = Instant::now();
     let file = read_source_file(path).map_err(|err| {
         eprintln!("{}", err);
@@ -255,9 +602,8 @@ fn cmd_build(
     let out_exe: PathBuf = match output_path {
         Some(out) => PathBuf::from(out),
         None => {
-            let path_obj = Path::new(path);
-            let stem = path_obj.file_stem().unwrap_or_default();
-            path_obj.with_file_name(stem)
+            let stem = path.file_stem().unwrap_or_default();
+            path.with_file_name(stem)
         }
     };
 
@@ -269,7 +615,13 @@ fn cmd_build(
         ..Default::default()
     };
 
-    let result = compile_source_to_executable(&file.content, &out_exe, &config, &mut diagnostics);
+    let result = compile_source_with_modules_to_executable(
+        path,
+        &file.content,
+        &out_exe,
+        &config,
+        &mut diagnostics,
+    );
 
     if diagnostics.has_errors() {
         eprint!("{}", diagnostics.render_all(&file));
@@ -278,7 +630,7 @@ fn cmd_build(
 
     match result {
         Ok(true) => {
-            println!("Built '{}' -> '{}'", path, out_exe.display());
+            println!("Built '{}' -> '{}'", path.display(), out_exe.display());
             if time {
                 let duration = start_time.elapsed();
                 eprintln!("Build time: {}", format_duration(duration));
@@ -303,9 +655,8 @@ impl Drop for TempFileGuard {
     }
 }
 
-fn cmd_run_native(path: &str, time: bool, passthrough_args: &[String]) -> Result<(), ()> {
-    let path_obj = Path::new(path);
-    let is_nx_source = path_obj.extension().is_some_and(|ext| ext == "nx");
+fn cmd_run_native(path: &Path, time: bool, passthrough_args: &[String]) -> Result<(), ()> {
+    let is_nx_source = path.extension().is_some_and(|ext| ext == "nx");
 
     let exe_to_run: PathBuf;
     let _temp_guard: Option<TempFileGuard>;
@@ -315,7 +666,7 @@ fn cmd_run_native(path: &str, time: bool, passthrough_args: &[String]) -> Result
             eprintln!("{}", err);
         })?;
 
-        let stem = path_obj
+        let stem = path
             .file_stem()
             .and_then(|s| s.to_str())
             .unwrap_or("run_bin");
@@ -326,8 +677,14 @@ fn cmd_run_native(path: &str, time: bool, passthrough_args: &[String]) -> Result
         let mut diagnostics = DiagnosticBag::new();
         let config = CodegenConfig::default();
 
-        let ok = compile_source_to_executable(&file.content, &tmp_exe, &config, &mut diagnostics)
-            .map_err(|e| {
+        let ok = compile_source_with_modules_to_executable(
+            path,
+            &file.content,
+            &tmp_exe,
+            &config,
+            &mut diagnostics,
+        )
+        .map_err(|e| {
             eprintln!("error: compilation failed: {}", e);
         })?;
 
@@ -340,11 +697,11 @@ fn cmd_run_native(path: &str, time: bool, passthrough_args: &[String]) -> Result
         exe_to_run = tmp_exe;
         _temp_guard = Some(TempFileGuard(tmp_dir));
     } else {
-        if !path_obj.exists() {
-            eprintln!("error: binary '{}' does not exist", path);
+        if !path.exists() {
+            eprintln!("error: binary '{}' does not exist", path.display());
             return Err(());
         }
-        exe_to_run = PathBuf::from(path);
+        exe_to_run = path.to_path_buf();
         _temp_guard = None;
     }
 
@@ -369,13 +726,13 @@ fn cmd_run_native(path: &str, time: bool, passthrough_args: &[String]) -> Result
     }
 }
 
-fn cmd_dump_nir(path: &str, opt_level: OptLevel) -> Result<(), ()> {
+fn cmd_dump_nir(path: &Path, opt_level: OptLevel) -> Result<(), ()> {
     let file = read_source_file(path).map_err(|err| {
         eprintln!("{}", err);
     })?;
 
     let mut diagnostics = DiagnosticBag::new();
-    let program = parse_source(&file.content, &mut diagnostics);
+    let program = parse_source_with_modules(path, &file.content, &mut diagnostics);
     if diagnostics.has_errors() {
         eprint!("{}", diagnostics.render_all(&file));
         return Err(());
@@ -388,7 +745,7 @@ fn cmd_dump_nir(path: &str, opt_level: OptLevel) -> Result<(), ()> {
         return Err(());
     }
 
-    let stem = Path::new(path)
+    let stem = path
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("program");
@@ -401,31 +758,37 @@ fn cmd_dump_nir(path: &str, opt_level: OptLevel) -> Result<(), ()> {
     Ok(())
 }
 
-fn cmd_dump_llvm(path: &str, opt_level: OptLevel) -> Result<(), ()> {
+fn cmd_dump_llvm(path: &Path, opt_level: OptLevel) -> Result<(), ()> {
     let file = read_source_file(path).map_err(|err| {
         eprintln!("{}", err);
     })?;
 
     let mut diagnostics = DiagnosticBag::new();
-    let config = CodegenConfig {
-        opt_level,
-        ..Default::default()
-    };
-
-    match nx_codegen::emit_llvm_ir_from_source(&file.content, &config, &mut diagnostics) {
-        Ok(Some(ir)) => {
-            println!("{}", ir);
-            Ok(())
-        }
-        Ok(None) => {
-            eprint!("{}", diagnostics.render_all(&file));
-            Err(())
-        }
-        Err(err) => {
-            eprintln!("error: failed to emit LLVM IR: {}", err);
-            Err(())
-        }
+    let program = parse_source_with_modules(path, &file.content, &mut diagnostics);
+    if diagnostics.has_errors() {
+        eprint!("{}", diagnostics.render_all(&file));
+        return Err(());
     }
+
+    let mut analyzer = nx_analyzer::SemanticAnalyzer::new(&mut diagnostics);
+    analyzer.analyze_program(&program);
+    if diagnostics.has_errors() {
+        eprint!("{}", diagnostics.render_all(&file));
+        return Err(());
+    }
+
+    let stem = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("module");
+    let lowering = AstLowering::new(stem);
+    let mut nir = lowering.lower_program(&program);
+    optimize_module(&mut nir, opt_level);
+
+    let llvm = nx_codegen::LlvmCompiler::new();
+    let ir = llvm.emit_llvm_ir(&nir);
+    println!("{}", ir);
+    Ok(())
 }
 
 fn main() {
@@ -443,6 +806,98 @@ fn main() {
         "--help" | "-h" | "help" => {
             print_help();
         }
+        "init" => {
+            let dir_arg = args.get(2).map(|s| s.as_str());
+            if cmd_init(dir_arg).is_err() {
+                process::exit(1);
+            }
+        }
+        "new" => {
+            if args.len() < 3 {
+                eprintln!("error: 'new' requires a project name\n\nUsage: nx new <project-name>");
+                process::exit(1);
+            }
+            if cmd_new(&args[2]).is_err() {
+                process::exit(1);
+            }
+        }
+        "add" => {
+            if args.len() < 3 {
+                eprintln!("error: 'add' requires a package name\n\nUsage: nx add <package> [--path <p>] [--git <g>] [--version <v>]");
+                process::exit(1);
+            }
+            let pkg = &args[2];
+            let mut path_opt = None;
+            let mut git_opt = None;
+            let mut version_opt = None;
+
+            let mut iter = args[3..].iter().peekable();
+            while let Some(arg) = iter.next() {
+                if arg == "--path" {
+                    path_opt = iter.next().map(|s| s.as_str());
+                } else if arg == "--git" {
+                    git_opt = iter.next().map(|s| s.as_str());
+                } else if arg == "--version" {
+                    version_opt = iter.next().map(|s| s.as_str());
+                }
+            }
+
+            if cmd_add(pkg, path_opt, git_opt, version_opt).is_err() {
+                process::exit(1);
+            }
+        }
+        "remove" => {
+            if args.len() < 3 {
+                eprintln!("error: 'remove' requires a package name\n\nUsage: nx remove <package>");
+                process::exit(1);
+            }
+            if cmd_remove(&args[2]).is_err() {
+                process::exit(1);
+            }
+        }
+        "update" => {
+            if cmd_update().is_err() {
+                process::exit(1);
+            }
+        }
+        "tree" => {
+            if cmd_tree().is_err() {
+                process::exit(1);
+            }
+        }
+        "fmt" => {
+            let mut check_mode = false;
+            let mut paths = Vec::new();
+
+            for arg in &args[2..] {
+                if arg == "--check" {
+                    check_mode = true;
+                } else if !arg.starts_with("--") {
+                    paths.push(arg.clone());
+                }
+            }
+
+            if cmd_fmt(&paths, check_mode).is_err() {
+                process::exit(1);
+            }
+        }
+        "test" => {
+            let mut path_arg = None;
+            let mut filter_opt = None;
+
+            let mut iter = args[2..].iter().peekable();
+            while let Some(arg) = iter.next() {
+                if arg == "--filter" {
+                    filter_opt = iter.next().map(|s| s.as_str());
+                } else if !arg.starts_with("--") && path_arg.is_none() {
+                    path_arg = Some(arg.as_str());
+                }
+            }
+
+            if cmd_test(path_arg, filter_opt).is_err() {
+                process::exit(1);
+            }
+        }
         "run" => {
             let mut file_path = None;
             let mut time_flag = false;
@@ -455,21 +910,19 @@ fn main() {
                 }
             }
 
-            let path = match file_path {
-                Some(p) => p,
-                None => {
-                    eprintln!(
-                        "error: 'run' requires a source file path\n\nUsage: nx run <file.nx> [--time]"
-                    );
+            let path = match resolve_entry_path(file_path) {
+                Ok(p) => p,
+                Err(err) => {
+                    eprintln!("{}", err);
                     process::exit(1);
                 }
             };
 
-            if cmd_run(path, time_flag).is_err() {
+            if cmd_run(&path, time_flag).is_err() {
                 process::exit(1);
             }
         }
-        "compile-js" | "compile" => {
+        "compile-js" => {
             let mut file_path = None;
             let mut output_path = None;
             let mut target = nx_js_backend::JsTarget::Node;
@@ -491,7 +944,7 @@ fn main() {
                             "browser" => target = nx_js_backend::JsTarget::Browser,
                             other => {
                                 eprintln!(
-                                    "error: unknown target '{}', supported: node, browser",
+                                    "error: invalid target '{}', expected 'node' or 'browser'",
                                     other
                                 );
                                 process::exit(1);
@@ -508,17 +961,15 @@ fn main() {
                 }
             }
 
-            let path = match file_path {
-                Some(p) => p,
-                None => {
-                    eprintln!(
-                        "error: 'compile-js' requires a source file path\n\nUsage: nx compile-js <file.nx> [-o <out.js>]"
-                    );
+            let path = match resolve_entry_path(file_path) {
+                Ok(p) => p,
+                Err(err) => {
+                    eprintln!("{}", err);
                     process::exit(1);
                 }
             };
 
-            if cmd_compile_js(path, output_path, target, to_stdout).is_err() {
+            if cmd_compile_js(&path, output_path, target, to_stdout).is_err() {
                 process::exit(1);
             }
         }
@@ -529,7 +980,7 @@ fn main() {
                 );
                 process::exit(1);
             }
-            if cmd_tokenize(&args[2]).is_err() {
+            if cmd_tokenize(Path::new(&args[2])).is_err() {
                 process::exit(1);
             }
         }
@@ -540,24 +991,34 @@ fn main() {
                 );
                 process::exit(1);
             }
-            if cmd_parse(&args[2]).is_err() {
+            if cmd_parse(Path::new(&args[2])).is_err() {
                 process::exit(1);
             }
         }
         "check" => {
-            if args.len() < 3 {
-                eprintln!(
-                    "error: 'check' requires a source file path\n\nUsage: nx check <file.nx>"
-                );
-                process::exit(1);
+            let mut file_path = None;
+            for arg in &args[2..] {
+                if !arg.starts_with("--") && file_path.is_none() {
+                    file_path = Some(arg.as_str());
+                }
             }
-            if cmd_check(&args[2]).is_err() {
+
+            let path = match resolve_entry_path(file_path) {
+                Ok(p) => p,
+                Err(err) => {
+                    eprintln!("{}", err);
+                    process::exit(1);
+                }
+            };
+
+            if cmd_check(&path).is_err() {
                 process::exit(1);
             }
         }
         "build" => {
             let mut file_path = None;
             let mut output_path = None;
+            let mut target = "native";
             let mut opt_level = OptLevel::O0;
             let mut dump_nir = false;
             let mut emit_llvm = false;
@@ -570,6 +1031,23 @@ fn main() {
                         output_path = Some(out.as_str());
                     } else {
                         eprintln!("error: '-o' requires an output file path");
+                        process::exit(1);
+                    }
+                } else if arg == "--target" {
+                    if let Some(t) = iter.next() {
+                        match t.as_str() {
+                            "native" => target = "native",
+                            "js" => target = "js",
+                            other => {
+                                eprintln!(
+                                    "error: invalid build target '{}', expected 'native' or 'js'",
+                                    other
+                                );
+                                process::exit(1);
+                            }
+                        }
+                    } else {
+                        eprintln!("error: '--target' requires 'native' or 'js'");
                         process::exit(1);
                     }
                 } else if arg == "--opt-level" {
@@ -604,15 +1082,25 @@ fn main() {
                 }
             }
 
-            let path = match file_path {
-                Some(p) => p,
-                None => {
-                    eprintln!("error: 'build' requires a source file path\n\nUsage: nx build <file.nx> [-o <out>] [--opt-level <0|1|2|3>] [--dump-nir] [--emit-llvm] [--time]");
+            let path = match resolve_entry_path(file_path) {
+                Ok(p) => p,
+                Err(err) => {
+                    eprintln!("{}", err);
                     process::exit(1);
                 }
             };
 
-            if cmd_build(path, output_path, opt_level, dump_nir, emit_llvm, time_flag).is_err() {
+            if cmd_build(
+                &path,
+                output_path,
+                target,
+                opt_level,
+                dump_nir,
+                emit_llvm,
+                time_flag,
+            )
+            .is_err()
+            {
                 process::exit(1);
             }
         }
@@ -631,15 +1119,15 @@ fn main() {
                 }
             }
 
-            let path = match file_path {
-                Some(p) => p,
-                None => {
-                    eprintln!("error: 'run-native' requires a file path\n\nUsage: nx run-native <file|binary> [--time]");
+            let path = match resolve_entry_path(file_path) {
+                Ok(p) => p,
+                Err(err) => {
+                    eprintln!("{}", err);
                     process::exit(1);
                 }
             };
 
-            if cmd_run_native(path, time_flag, &passthrough).is_err() {
+            if cmd_run_native(&path, time_flag, &passthrough).is_err() {
                 process::exit(1);
             }
         }
@@ -675,15 +1163,15 @@ fn main() {
                 }
             }
 
-            let path = match file_path {
-                Some(p) => p,
-                None => {
-                    eprintln!("error: 'dump-nir' requires a source file path\n\nUsage: nx dump-nir <file.nx> [--opt-level <0|1|2|3>]");
+            let path = match resolve_entry_path(file_path) {
+                Ok(p) => p,
+                Err(err) => {
+                    eprintln!("{}", err);
                     process::exit(1);
                 }
             };
 
-            if cmd_dump_nir(path, opt_level).is_err() {
+            if cmd_dump_nir(&path, opt_level).is_err() {
                 process::exit(1);
             }
         }
@@ -719,15 +1207,15 @@ fn main() {
                 }
             }
 
-            let path = match file_path {
-                Some(p) => p,
-                None => {
-                    eprintln!("error: 'dump-llvm' requires a source file path\n\nUsage: nx dump-llvm <file.nx> [--opt-level <0|1|2|3>]");
+            let path = match resolve_entry_path(file_path) {
+                Ok(p) => p,
+                Err(err) => {
+                    eprintln!("{}", err);
                     process::exit(1);
                 }
             };
 
-            if cmd_dump_llvm(path, opt_level).is_err() {
+            if cmd_dump_llvm(&path, opt_level).is_err() {
                 process::exit(1);
             }
         }

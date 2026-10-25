@@ -49,6 +49,38 @@ impl AstLowering {
         extern_functions.insert("ptr_offset".to_string(), NirType::Ptr);
         extern_functions.insert("ptr_read_u8".to_string(), NirType::U8);
         extern_functions.insert("ptr_write_u8".to_string(), NirType::Void);
+        // Phase 9 Standard Library Primitives
+        extern_functions.insert("math_abs".to_string(), NirType::F64);
+        extern_functions.insert("int_abs".to_string(), NirType::I64);
+        extern_functions.insert("math_sqrt".to_string(), NirType::F64);
+        extern_functions.insert("math_pow".to_string(), NirType::F64);
+        extern_functions.insert("math_floor".to_string(), NirType::F64);
+        extern_functions.insert("math_ceil".to_string(), NirType::F64);
+        extern_functions.insert("math_min".to_string(), NirType::F64);
+        extern_functions.insert("math_max".to_string(), NirType::F64);
+        extern_functions.insert("math_sin".to_string(), NirType::F64);
+        extern_functions.insert("math_cos".to_string(), NirType::F64);
+        extern_functions.insert("math_random".to_string(), NirType::F64);
+        extern_functions.insert("str_len".to_string(), NirType::I64);
+        extern_functions.insert("str_upper".to_string(), NirType::Ptr);
+        extern_functions.insert("str_lower".to_string(), NirType::Ptr);
+        extern_functions.insert("str_trim".to_string(), NirType::Ptr);
+        extern_functions.insert("str_sub".to_string(), NirType::Ptr);
+        extern_functions.insert("str_contains".to_string(), NirType::Bool);
+        extern_functions.insert("str_starts_with".to_string(), NirType::Bool);
+        extern_functions.insert("str_ends_with".to_string(), NirType::Bool);
+        extern_functions.insert("time_now_ms".to_string(), NirType::I64);
+        extern_functions.insert("time_sleep_ms".to_string(), NirType::Void);
+        extern_functions.insert("hex_encode".to_string(), NirType::Ptr);
+        extern_functions.insert("hex_decode".to_string(), NirType::Ptr);
+        extern_functions.insert("base64_encode".to_string(), NirType::Ptr);
+        extern_functions.insert("base64_decode".to_string(), NirType::Ptr);
+        extern_functions.insert("json_parse".to_string(), NirType::Ptr);
+        extern_functions.insert("json_stringify".to_string(), NirType::Ptr);
+        extern_functions.insert("nx_rt_assert".to_string(), NirType::Void);
+        extern_functions.insert("assert".to_string(), NirType::Void);
+        extern_functions.insert("nx_rt_assert_eq".to_string(), NirType::Void);
+        extern_functions.insert("assert_eq".to_string(), NirType::Void);
 
         Self {
             module: NirModule::new(module_name),
@@ -229,6 +261,8 @@ impl AstLowering {
                             | Stmt::InterfaceDecl(_)
                             | Stmt::StructDecl(_)
                             | Stmt::ExternBlock(_)
+                            | Stmt::Import(_)
+                            | Stmt::TestDecl(_)
                     )
                 })
                 .collect();

@@ -1,0 +1,18 @@
+// NextLang Standard Library: encoding
+// Hexadecimal and Base64 string encoding and decoding
+
+fn to_hex(s:<STRING>):<STRING> {
+    return hex_encode(s);
+}
+
+fn from_hex(s:<STRING>):<STRING> {
+    return hex_decode(s);
+}
+
+fn to_base64(s:<STRING>):<STRING> {
+    return base64_encode(s);
+}
+
+fn from_base64(s:<STRING>):<STRING> {
+    return base64_decode(s);
+}

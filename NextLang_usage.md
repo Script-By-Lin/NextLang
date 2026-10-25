@@ -805,3 +805,185 @@ fn main() {
     vout("=== Telemetry Subsystem Finished Successfully ===");
 }
 </code></pre>
+
+<hr>
+
+<h2>13. Modules and Standard Library</h2>
+
+<p>
+NextLang provides a modular standard library and import system. External files and standard library modules are brought into scope using the <b>import</b> statement.
+</p>
+
+<h3>Import Syntax</h3>
+<p>
+Standard modules are imported by name, while local modules are imported using relative quoted string paths:
+</p>
+
+<pre><code>import math;
+import strings;
+import time;
+import encoding;
+import json;
+import fs;
+import testing;
+import "utils.nx";
+</code></pre>
+
+<h3>Standard Library Modules</h3>
+
+<p>
+<b>1. math:</b> Mathematical constants and computational functions including <b>abs</b>, <b>sqrt</b>, <b>pow</b>, <b>floor</b>, <b>ceil</b>, <b>min</b>, <b>max</b>, <b>sin</b>, <b>cos</b>, and <b>random</b>.
+</p>
+
+<pre><code>import math;
+
+var root:&lt;FL64&gt; = sqrt(64.0);
+var power:&lt;FL64&gt; = pow(2.0, 8.0);
+var minimum:&lt;FL64&gt; = min(10.5, 4.2);
+</code></pre>
+
+<p>
+<b>2. strings:</b> String utilities and inspection functions including <b>upper</b>, <b>lower</b>, <b>trim</b>, <b>sub</b>, <b>contains</b>, <b>starts_with</b>, and <b>ends_with</b>. Builtin primitives such as <b>str_len</b>, <b>str_upper</b>, and <b>str_contains</b> are also directly accessible.
+</p>
+
+<pre><code>import strings;
+
+var raw:&lt;STRING&gt; = "   NextLang Systems   ";
+var cleaned:&lt;STRING&gt; = trim(raw);
+var is_present:&lt;BOOL&gt; = contains(cleaned, "Systems");
+</code></pre>
+
+<p>
+<b>3. time:</b> High-resolution system time retrieval and process sleeping with <b>time_now_ms</b>, <b>time_sleep_ms</b>, <b>now_ms</b>, and <b>sleep_ms</b>.
+</p>
+
+<pre><code>import time;
+
+var t0:&lt;INT64&gt; = now_ms();
+sleep_ms(50);
+var t1:&lt;INT64&gt; = now_ms();
+vout("Elapsed milliseconds:", t1 - t0);
+</code></pre>
+
+<p>
+<b>4. encoding:</b> Data encoding and decoding with <b>hex_encode</b>, <b>hex_decode</b>, <b>base64_encode</b>, and <b>base64_decode</b>.
+</p>
+
+<pre><code>import encoding;
+
+var encoded:&lt;STRING&gt; = to_base64("NextLang");
+var decoded:&lt;STRING&gt; = from_base64(encoded);
+vout("Base64:", encoded, "Restored:", decoded);
+</code></pre>
+
+<p>
+<b>5. json:</b> Serialization and parsing functions with <b>json_parse</b>, <b>json_stringify</b>, <b>parse_json</b>, and <b>stringify_json</b>.
+</p>
+
+<pre><code>import json;
+
+var payload:&lt;STRING&gt; = "{\"name\": \"NextLang\", \"version\": 1}";
+var parsed:&lt;STRING&gt; = parse_json(payload);
+vout("Parsed payload:", parsed);
+</code></pre>
+
+<p>
+<b>6. fs:</b> Filesystem interactions with <b>read_file</b>, <b>write_file</b>, <b>exists</b>, <b>remove</b>, and <b>current_dir</b>.
+</p>
+
+<pre><code>import fs;
+
+var path:&lt;STRING&gt; = "sample.txt";
+write_file(path, "NextLang filesystem test.");
+if exists(path) {
+    var content:&lt;STRING&gt; = read_file(path);
+    vout("File content:", content);
+    remove(path);
+}
+</code></pre>
+
+<hr>
+
+<h2>14. Project and Package Management</h2>
+
+<p>
+NextLang includes a built-in project manager driven by the <b>nextlang.toml</b> manifest and reproducible <b>nextlang.lock</b> lockfile.
+</p>
+
+<h3>Project Manifest (nextlang.toml)</h3>
+<p>
+The project manifest declares package metadata, build entry point, and local or remote dependencies:
+</p>
+
+<pre><code>[package]
+name = "my_service"
+version = "0.1.0"
+edition = "2024"
+description = "NextLang microservice"
+
+[build]
+entry = "src/main.nx"
+target = "native"
+
+[dependencies]
+network_core = { path = "../network_core" }
+utility = { git = "https://github.com/example/utility.git" }
+</code></pre>
+
+<h3>Package Manager Commands</h3>
+<p>
+<b>nx init [dir]</b>: Initializes a NextLang package in the current or target directory.<br>
+<b>nx new &lt;name&gt;</b>: Scaffolds a new project directory with manifest, starter source, and test suite.<br>
+<b>nx add &lt;pkg&gt; [--path &lt;path&gt;] [--git &lt;url&gt;]</b>: Adds a dependency and resolves lockfile.<br>
+<b>nx remove &lt;pkg&gt;</b>: Removes a dependency from manifest and lockfile.<br>
+<b>nx update</b>: Re-evaluates dependency graphs and updates nextlang.lock.<br>
+<b>nx tree</b>: Renders the dependency tree.<br>
+</p>
+
+<hr>
+
+<h2>15. Testing Framework</h2>
+
+<p>
+Unit tests are declared using the <b>test</b> keyword. NextLang discovers tests across files in the <b>tests</b> directory and files ending in <b>_test.nx</b>.
+</p>
+
+<pre><code>import testing;
+import math;
+
+test "verify absolute values" {
+    assert(abs(-42.0) == 42.0, "positive result expected");
+    assert_eq("hello", "hello", "string equality check");
+}
+
+test "verify square root" {
+    assert(sqrt(100.0) == 10.0, "sqrt(100) must equal 10");
+}
+</code></pre>
+
+<p>
+Execute tests using the CLI test command:
+</p>
+
+<pre><code>nx test
+nx test --filter "square root"
+</code></pre>
+
+<p>
+The test runner reports execution durations, pass/fail totals, and exits with a non-zero status code if any assertion fails.
+</p>
+
+<hr>
+
+<h2>16. Source Code Formatter</h2>
+
+<p>
+NextLang provides an automated, deterministic code formatter. The formatter parses the source AST and produces canonical indentation and spacing:
+</p>
+
+<pre><code>// Format all source and test files in project
+nx fmt
+
+// Verify formatting in continuous integration without modifying files
+nx fmt --check
+</code></pre>

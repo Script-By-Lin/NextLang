@@ -277,6 +277,21 @@ impl JsEmitter {
             Stmt::ExternBlock(_) => {
                 // Foreign C declarations; no-op in JS emitter
             }
+            Stmt::Import(_) => {
+                // Imports are resolved before JS emission
+            }
+            Stmt::TestDecl(t) => {
+                let indent = self.indent_str();
+                self.output
+                    .push_str(&format!("{}// test: {}\n", indent, t.name));
+                self.output.push_str(&format!("{}{{\n", indent));
+                self.indent_level += 1;
+                for s in &t.body.statements {
+                    self.emit_stmt(s);
+                }
+                self.indent_level -= 1;
+                self.output.push_str(&format!("{}}}\n", indent));
+            }
         }
     }
 

@@ -156,7 +156,14 @@ impl<W: Write> Interpreter<W> {
             | Stmt::InterfaceDecl(_)
             | Stmt::ClassDecl(_)
             | Stmt::StructDecl(_)
-            | Stmt::ExternBlock(_) => Ok(ControlFlow::None),
+            | Stmt::ExternBlock(_)
+            | Stmt::Import(_) => Ok(ControlFlow::None),
+            Stmt::TestDecl(t) => {
+                self.env.push_scope();
+                let res = self.eval_block(&t.body);
+                self.env.pop_scope();
+                res
+            }
             Stmt::Unsafe(u) => {
                 self.env.push_scope();
                 let res = self.eval_block(&u.body);
@@ -1320,6 +1327,436 @@ impl<W: Write> Interpreter<W> {
                             list[off + 3] = Value::Int(((val >> 24) & 0xFF) as i128);
                         }
                     }
+                }
+                Ok(Some(Value::Void))
+            }
+            // Phase 9 Standard Library Primitives
+            "math_abs" | "abs" => {
+                if let Some(arg) = args.first() {
+                    match self.eval_expr(arg)?.unwrap_ref() {
+                        Value::Float(f) => Ok(Some(Value::Float(f.abs()))),
+                        Value::Int(n) => Ok(Some(Value::Int(n.abs()))),
+                        _ => Ok(Some(Value::Float(0.0))),
+                    }
+                } else {
+                    Ok(Some(Value::Float(0.0)))
+                }
+            }
+            "int_abs" => {
+                if let Some(arg) = args.first() {
+                    match self.eval_expr(arg)?.unwrap_ref() {
+                        Value::Int(n) => Ok(Some(Value::Int(n.abs()))),
+                        _ => Ok(Some(Value::Int(0))),
+                    }
+                } else {
+                    Ok(Some(Value::Int(0)))
+                }
+            }
+            "math_sqrt" | "sqrt" => {
+                if let Some(arg) = args.first() {
+                    let v = self.eval_expr(arg)?;
+                    let f = match v.unwrap_ref() {
+                        Value::Float(x) => x,
+                        Value::Int(n) => n as f64,
+                        _ => 0.0,
+                    };
+                    if f < 0.0 {
+                        return Err(RuntimeError::new(
+                            "math domain error: sqrt of negative number",
+                        ));
+                    }
+                    Ok(Some(Value::Float(f.sqrt())))
+                } else {
+                    Ok(Some(Value::Float(0.0)))
+                }
+            }
+            "math_pow" | "pow" => {
+                if args.len() >= 2 {
+                    let b = match self.eval_expr(&args[0])?.unwrap_ref() {
+                        Value::Float(f) => f,
+                        Value::Int(n) => n as f64,
+                        _ => 0.0,
+                    };
+                    let e = match self.eval_expr(&args[1])?.unwrap_ref() {
+                        Value::Float(f) => f,
+                        Value::Int(n) => n as f64,
+                        _ => 0.0,
+                    };
+                    Ok(Some(Value::Float(b.powf(e))))
+                } else {
+                    Ok(Some(Value::Float(0.0)))
+                }
+            }
+            "math_floor" | "floor" => {
+                if let Some(arg) = args.first() {
+                    let f = match self.eval_expr(arg)?.unwrap_ref() {
+                        Value::Float(x) => x,
+                        Value::Int(n) => n as f64,
+                        _ => 0.0,
+                    };
+                    Ok(Some(Value::Float(f.floor())))
+                } else {
+                    Ok(Some(Value::Float(0.0)))
+                }
+            }
+            "math_ceil" | "ceil" => {
+                if let Some(arg) = args.first() {
+                    let f = match self.eval_expr(arg)?.unwrap_ref() {
+                        Value::Float(x) => x,
+                        Value::Int(n) => n as f64,
+                        _ => 0.0,
+                    };
+                    Ok(Some(Value::Float(f.ceil())))
+                } else {
+                    Ok(Some(Value::Float(0.0)))
+                }
+            }
+            "math_min" | "min" => {
+                if args.len() >= 2 {
+                    let v1 = self.eval_expr(&args[0])?;
+                    let v2 = self.eval_expr(&args[1])?;
+                    match (v1.unwrap_ref(), v2.unwrap_ref()) {
+                        (Value::Int(a), Value::Int(b)) => Ok(Some(Value::Int(a.min(b)))),
+                        _ => {
+                            let f1 = match v1.unwrap_ref() {
+                                Value::Float(f) => f,
+                                Value::Int(n) => n as f64,
+                                _ => 0.0,
+                            };
+                            let f2 = match v2.unwrap_ref() {
+                                Value::Float(f) => f,
+                                Value::Int(n) => n as f64,
+                                _ => 0.0,
+                            };
+                            Ok(Some(Value::Float(f1.min(f2))))
+                        }
+                    }
+                } else {
+                    Ok(Some(Value::Float(0.0)))
+                }
+            }
+            "math_max" | "max" => {
+                if args.len() >= 2 {
+                    let v1 = self.eval_expr(&args[0])?;
+                    let v2 = self.eval_expr(&args[1])?;
+                    match (v1.unwrap_ref(), v2.unwrap_ref()) {
+                        (Value::Int(a), Value::Int(b)) => Ok(Some(Value::Int(a.max(b)))),
+                        _ => {
+                            let f1 = match v1.unwrap_ref() {
+                                Value::Float(f) => f,
+                                Value::Int(n) => n as f64,
+                                _ => 0.0,
+                            };
+                            let f2 = match v2.unwrap_ref() {
+                                Value::Float(f) => f,
+                                Value::Int(n) => n as f64,
+                                _ => 0.0,
+                            };
+                            Ok(Some(Value::Float(f1.max(f2))))
+                        }
+                    }
+                } else {
+                    Ok(Some(Value::Float(0.0)))
+                }
+            }
+            "math_sin" | "sin" => {
+                if let Some(arg) = args.first() {
+                    let f = match self.eval_expr(arg)?.unwrap_ref() {
+                        Value::Float(x) => x,
+                        Value::Int(n) => n as f64,
+                        _ => 0.0,
+                    };
+                    Ok(Some(Value::Float(f.sin())))
+                } else {
+                    Ok(Some(Value::Float(0.0)))
+                }
+            }
+            "math_cos" | "cos" => {
+                if let Some(arg) = args.first() {
+                    let f = match self.eval_expr(arg)?.unwrap_ref() {
+                        Value::Float(x) => x,
+                        Value::Int(n) => n as f64,
+                        _ => 0.0,
+                    };
+                    Ok(Some(Value::Float(f.cos())))
+                } else {
+                    Ok(Some(Value::Float(0.0)))
+                }
+            }
+            "math_random" | "random" => {
+                let nanos = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_nanos();
+                let pseudo = ((nanos % 1_000_000) as f64) / 1_000_000.0;
+                Ok(Some(Value::Float(pseudo)))
+            }
+            "str_len" => {
+                if let Some(arg) = args.first() {
+                    let s = format!("{}", self.eval_expr(arg)?);
+                    Ok(Some(Value::Int(s.len() as i128)))
+                } else {
+                    Ok(Some(Value::Int(0)))
+                }
+            }
+            "str_upper" => {
+                if let Some(arg) = args.first() {
+                    let s = format!("{}", self.eval_expr(arg)?);
+                    Ok(Some(Value::String(s.to_uppercase())))
+                } else {
+                    Ok(Some(Value::String(String::new())))
+                }
+            }
+            "str_lower" => {
+                if let Some(arg) = args.first() {
+                    let s = format!("{}", self.eval_expr(arg)?);
+                    Ok(Some(Value::String(s.to_lowercase())))
+                } else {
+                    Ok(Some(Value::String(String::new())))
+                }
+            }
+            "str_trim" => {
+                if let Some(arg) = args.first() {
+                    let s = format!("{}", self.eval_expr(arg)?);
+                    Ok(Some(Value::String(s.trim().to_string())))
+                } else {
+                    Ok(Some(Value::String(String::new())))
+                }
+            }
+            "str_sub" => {
+                if args.len() >= 3 {
+                    let s = format!("{}", self.eval_expr(&args[0])?);
+                    let start = match self.eval_expr(&args[1])?.unwrap_ref() {
+                        Value::Int(n) => n.max(0) as usize,
+                        _ => 0,
+                    };
+                    let len = match self.eval_expr(&args[2])?.unwrap_ref() {
+                        Value::Int(n) => n.max(0) as usize,
+                        _ => 0,
+                    };
+                    let sub: String = s.chars().skip(start).take(len).collect();
+                    Ok(Some(Value::String(sub)))
+                } else {
+                    Ok(Some(Value::String(String::new())))
+                }
+            }
+            "str_contains" => {
+                if args.len() >= 2 {
+                    let s = format!("{}", self.eval_expr(&args[0])?);
+                    let sub = format!("{}", self.eval_expr(&args[1])?);
+                    Ok(Some(Value::Bool(s.contains(&sub))))
+                } else {
+                    Ok(Some(Value::Bool(false)))
+                }
+            }
+            "str_starts_with" => {
+                if args.len() >= 2 {
+                    let s = format!("{}", self.eval_expr(&args[0])?);
+                    let prefix = format!("{}", self.eval_expr(&args[1])?);
+                    Ok(Some(Value::Bool(s.starts_with(&prefix))))
+                } else {
+                    Ok(Some(Value::Bool(false)))
+                }
+            }
+            "str_ends_with" => {
+                if args.len() >= 2 {
+                    let s = format!("{}", self.eval_expr(&args[0])?);
+                    let suffix = format!("{}", self.eval_expr(&args[1])?);
+                    Ok(Some(Value::Bool(s.ends_with(&suffix))))
+                } else {
+                    Ok(Some(Value::Bool(false)))
+                }
+            }
+            "time_now_ms" => {
+                let ms = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis();
+                Ok(Some(Value::Int(ms as i128)))
+            }
+            "time_sleep_ms" => {
+                if let Some(arg) = args.first() {
+                    let ms = match self.eval_expr(arg)?.unwrap_ref() {
+                        Value::Int(n) => n.max(0) as u64,
+                        _ => 0,
+                    };
+                    std::thread::sleep(std::time::Duration::from_millis(ms));
+                }
+                Ok(Some(Value::Void))
+            }
+            "hex_encode" => {
+                if let Some(arg) = args.first() {
+                    let s = format!("{}", self.eval_expr(arg)?);
+                    let mut hex = String::new();
+                    for b in s.as_bytes() {
+                        hex.push_str(&format!("{:02x}", b));
+                    }
+                    Ok(Some(Value::String(hex)))
+                } else {
+                    Ok(Some(Value::String(String::new())))
+                }
+            }
+            "hex_decode" => {
+                if let Some(arg) = args.first() {
+                    let s = format!("{}", self.eval_expr(arg)?);
+                    if s.len() % 2 != 0 {
+                        return Err(RuntimeError::new("invalid hex string: odd length"));
+                    }
+                    let mut bytes = Vec::new();
+                    for i in (0..s.len()).step_by(2) {
+                        let byte = u8::from_str_radix(&s[i..i + 2], 16)
+                            .map_err(|_| RuntimeError::new("invalid hex character"))?;
+                        bytes.push(byte);
+                    }
+                    let decoded = String::from_utf8(bytes)
+                        .map_err(|_| RuntimeError::new("invalid utf8 in hex_decode"))?;
+                    Ok(Some(Value::String(decoded)))
+                } else {
+                    Ok(Some(Value::String(String::new())))
+                }
+            }
+            "base64_encode" => {
+                if let Some(arg) = args.first() {
+                    let s = format!("{}", self.eval_expr(arg)?);
+                    const B64: &[u8] =
+                        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+                    let bytes = s.as_bytes();
+                    let mut res = String::new();
+                    let mut i = 0;
+                    while i < bytes.len() {
+                        let b0 = bytes[i];
+                        let b1 = if i + 1 < bytes.len() { bytes[i + 1] } else { 0 };
+                        let b2 = if i + 2 < bytes.len() { bytes[i + 2] } else { 0 };
+                        let triple = ((b0 as u32) << 16) | ((b1 as u32) << 8) | (b2 as u32);
+                        res.push(B64[((triple >> 18) & 0x3F) as usize] as char);
+                        res.push(B64[((triple >> 12) & 0x3F) as usize] as char);
+                        if i + 1 < bytes.len() {
+                            res.push(B64[((triple >> 6) & 0x3F) as usize] as char);
+                        } else {
+                            res.push('=');
+                        }
+                        if i + 2 < bytes.len() {
+                            res.push(B64[(triple & 0x3F) as usize] as char);
+                        } else {
+                            res.push('=');
+                        }
+                        i += 3;
+                    }
+                    Ok(Some(Value::String(res)))
+                } else {
+                    Ok(Some(Value::String(String::new())))
+                }
+            }
+            "base64_decode" => {
+                if let Some(arg) = args.first() {
+                    let s = format!("{}", self.eval_expr(arg)?);
+                    let s = s.trim();
+                    if s.len() % 4 != 0 {
+                        return Err(RuntimeError::new("invalid base64 string length"));
+                    }
+                    fn b64_char(c: u8) -> Result<u32, RuntimeError> {
+                        match c {
+                            b'A'..=b'Z' => Ok((c - b'A') as u32),
+                            b'a'..=b'z' => Ok((c - b'a' + 26) as u32),
+                            b'0'..=b'9' => Ok((c - b'0' + 52) as u32),
+                            b'+' => Ok(62),
+                            b'/' => Ok(63),
+                            _ => Err(RuntimeError::new("invalid base64 character")),
+                        }
+                    }
+                    let bytes = s.as_bytes();
+                    let mut out = Vec::new();
+                    let mut i = 0;
+                    while i < bytes.len() {
+                        let c0 = b64_char(bytes[i])?;
+                        let c1 = b64_char(bytes[i + 1])?;
+                        let c2 = if bytes[i + 2] == b'=' {
+                            0
+                        } else {
+                            b64_char(bytes[i + 2])?
+                        };
+                        let c3 = if bytes[i + 3] == b'=' {
+                            0
+                        } else {
+                            b64_char(bytes[i + 3])?
+                        };
+                        let triple = (c0 << 18) | (c1 << 12) | (c2 << 6) | c3;
+                        out.push(((triple >> 16) & 0xFF) as u8);
+                        if bytes[i + 2] != b'=' {
+                            out.push(((triple >> 8) & 0xFF) as u8);
+                        }
+                        if bytes[i + 3] != b'=' {
+                            out.push((triple & 0xFF) as u8);
+                        }
+                        i += 4;
+                    }
+                    let decoded = String::from_utf8(out)
+                        .map_err(|_| RuntimeError::new("invalid utf8 in base64_decode"))?;
+                    Ok(Some(Value::String(decoded)))
+                } else {
+                    Ok(Some(Value::String(String::new())))
+                }
+            }
+            "json_parse" => {
+                if let Some(arg) = args.first() {
+                    let s = format!("{}", self.eval_expr(arg)?);
+                    // Minimal JSON validation
+                    let trimmed = s.trim();
+                    if (trimmed.starts_with('{') && trimmed.ends_with('}'))
+                        || (trimmed.starts_with('[') && trimmed.ends_with(']'))
+                        || (trimmed.starts_with('"') && trimmed.ends_with('"'))
+                        || trimmed == "true"
+                        || trimmed == "false"
+                        || trimmed == "null"
+                        || trimmed.parse::<f64>().is_ok()
+                    {
+                        Ok(Some(Value::String(s)))
+                    } else {
+                        Err(RuntimeError::new(format!("invalid JSON input: '{}'", s)))
+                    }
+                } else {
+                    Err(RuntimeError::new("json_parse requires 1 argument"))
+                }
+            }
+            "json_stringify" => {
+                if let Some(arg) = args.first() {
+                    let v = self.eval_expr(arg)?;
+                    Ok(Some(Value::String(format!("{}", v))))
+                } else {
+                    Ok(Some(Value::String("null".to_string())))
+                }
+            }
+            "assert" => {
+                if args.is_empty() {
+                    return Err(RuntimeError::new("assert requires at least 1 argument"));
+                }
+                let cond = self.eval_expr(&args[0])?;
+                if !cond.is_truthy() {
+                    let msg = if args.len() >= 2 {
+                        format!("{}", self.eval_expr(&args[1])?)
+                    } else {
+                        "assertion failed".to_string()
+                    };
+                    return Err(RuntimeError::new(format!("Assertion Failed: {}", msg)));
+                }
+                Ok(Some(Value::Void))
+            }
+            "assert_eq" => {
+                if args.len() < 2 {
+                    return Err(RuntimeError::new("assert_eq requires 2 arguments"));
+                }
+                let actual = self.eval_expr(&args[0])?;
+                let expected = self.eval_expr(&args[1])?;
+                if actual != expected {
+                    let msg = if args.len() >= 3 {
+                        format!(": {}", self.eval_expr(&args[2])?)
+                    } else {
+                        String::new()
+                    };
+                    return Err(RuntimeError::new(format!(
+                        "Assertion Failed{}: expected '{}', got '{}'",
+                        msg, expected, actual
+                    )));
                 }
                 Ok(Some(Value::Void))
             }

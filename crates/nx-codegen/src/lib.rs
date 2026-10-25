@@ -77,6 +77,37 @@ pub fn compile_nir_to_executable(
     }
 }
 
+/// Compiles an already parsed & resolved AST Program to a native executable at `output_exe`.
+pub fn compile_program_to_executable(
+    program: &nx_ast::Program,
+    output_exe: &Path,
+    config: &CodegenConfig,
+    diagnostics: &mut DiagnosticBag,
+) -> Result<bool, String> {
+    let mut analyzer = SemanticAnalyzer::new(diagnostics);
+    analyzer.analyze_program(program);
+    if diagnostics.has_errors() {
+        return Ok(false);
+    }
+
+    let stem = output_exe
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("program");
+
+    let lowering = AstLowering::new(stem);
+    let mut nir = lowering.lower_program(program);
+
+    optimize_module(&mut nir, config.opt_level);
+
+    if config.dump_nir {
+        println!("{}", print_module(&nir));
+    }
+
+    compile_nir_to_executable(&nir, output_exe, config)?;
+    Ok(true)
+}
+
 /// Fully parses, semantically checks, lowers to NIR, optimizes, and compiles NextLang source code to a native executable.
 /// Returns Ok(true) if compilation succeeded, Ok(false) if syntax/semantic errors occurred, or Err on linker/system failure.
 pub fn compile_source_to_executable(
@@ -89,29 +120,23 @@ pub fn compile_source_to_executable(
     if diagnostics.has_errors() {
         return Ok(false);
     }
+    compile_program_to_executable(&program, output_exe, config, diagnostics)
+}
 
-    let mut analyzer = SemanticAnalyzer::new(diagnostics);
-    analyzer.analyze_program(&program);
+/// Resolves imports recursively, typechecks, lowers to NIR, and compiles to a native executable.
+pub fn compile_source_with_modules_to_executable(
+    entry_path: &Path,
+    source: &str,
+    output_exe: &Path,
+    config: &CodegenConfig,
+    diagnostics: &mut DiagnosticBag,
+) -> Result<bool, String> {
+    let mut resolver = nx_parser::modules::ModuleResolver::new();
+    let program = resolver.resolve_entry(entry_path, source, diagnostics);
     if diagnostics.has_errors() {
         return Ok(false);
     }
-
-    let stem = output_exe
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("program");
-
-    let lowering = AstLowering::new(stem);
-    let mut nir = lowering.lower_program(&program);
-
-    optimize_module(&mut nir, config.opt_level);
-
-    if config.dump_nir {
-        println!("{}", print_module(&nir));
-    }
-
-    compile_nir_to_executable(&nir, output_exe, config)?;
-    Ok(true)
+    compile_program_to_executable(&program, output_exe, config, diagnostics)
 }
 
 /// Parses, typechecks, lowers to NIR, optimizes, and emits LLVM IR textual representation.

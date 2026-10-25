@@ -66,6 +66,36 @@ impl<'a> ScopeChecker<'a> {
             "ptr_offset",
             "ptr_read_u8",
             "ptr_write_u8",
+            // Phase 9 Standard Library builtins
+            "math_abs",
+            "math_sqrt",
+            "math_pow",
+            "math_floor",
+            "math_ceil",
+            "math_min",
+            "math_max",
+            "math_sin",
+            "math_cos",
+            "math_random",
+            "int_abs",
+            "str_len",
+            "str_upper",
+            "str_lower",
+            "str_trim",
+            "str_sub",
+            "str_contains",
+            "str_starts_with",
+            "str_ends_with",
+            "time_now_ms",
+            "time_sleep_ms",
+            "hex_encode",
+            "hex_decode",
+            "base64_encode",
+            "base64_decode",
+            "json_parse",
+            "json_stringify",
+            "assert",
+            "assert_eq",
         ] {
             root_scope.insert(
                 builtin.to_string(),
@@ -294,6 +324,10 @@ impl<'a> ScopeChecker<'a> {
                         span: f.name.span,
                     });
                 }
+            }
+            Stmt::Import(_) => {}
+            Stmt::TestDecl(t) => {
+                self.check_block(&t.body);
             }
         }
     }

@@ -146,6 +146,40 @@ impl LlvmCompiler {
         out.push_str("declare i8 @ptr_read_u8(ptr)\n");
         out.push_str("declare void @ptr_write_u8(ptr, i8)\n\n");
 
+        // Phase 9 Standard Library Declarations
+        out.push_str("; Phase 9 Standard Library Primitives\n");
+        out.push_str("declare double @math_abs(double)\n");
+        out.push_str("declare i64 @int_abs(i64)\n");
+        out.push_str("declare double @math_sqrt(double)\n");
+        out.push_str("declare double @math_pow(double, double)\n");
+        out.push_str("declare double @math_floor(double)\n");
+        out.push_str("declare double @math_ceil(double)\n");
+        out.push_str("declare double @math_min(double, double)\n");
+        out.push_str("declare double @math_max(double, double)\n");
+        out.push_str("declare double @math_sin(double)\n");
+        out.push_str("declare double @math_cos(double)\n");
+        out.push_str("declare double @math_random()\n");
+        out.push_str("declare i64 @str_len(ptr)\n");
+        out.push_str("declare ptr @str_upper(ptr)\n");
+        out.push_str("declare ptr @str_lower(ptr)\n");
+        out.push_str("declare ptr @str_trim(ptr)\n");
+        out.push_str("declare ptr @str_sub(ptr, i64, i64)\n");
+        out.push_str("declare i1 @str_contains(ptr, ptr)\n");
+        out.push_str("declare i1 @str_starts_with(ptr, ptr)\n");
+        out.push_str("declare i1 @str_ends_with(ptr, ptr)\n");
+        out.push_str("declare i64 @time_now_ms()\n");
+        out.push_str("declare void @time_sleep_ms(i64)\n");
+        out.push_str("declare ptr @hex_encode(ptr)\n");
+        out.push_str("declare ptr @hex_decode(ptr)\n");
+        out.push_str("declare ptr @base64_encode(ptr)\n");
+        out.push_str("declare ptr @base64_decode(ptr)\n");
+        out.push_str("declare ptr @json_parse(ptr)\n");
+        out.push_str("declare ptr @json_stringify(ptr)\n");
+        out.push_str("declare void @nx_rt_assert(i1, ptr)\n");
+        out.push_str("declare void @assert(i1, ptr)\n");
+        out.push_str("declare void @nx_rt_assert_eq(ptr, ptr, ptr)\n");
+        out.push_str("declare void @assert_eq(ptr, ptr, ptr)\n\n");
+
         // 5. External C functions (e.g., abs, puts, etc.)
         let mut declared_externs: HashSet<String> = HashSet::new();
         let internal_funcs: HashSet<String> =
@@ -189,6 +223,37 @@ impl LlvmCompiler {
             "ptr_offset",
             "ptr_read_u8",
             "ptr_write_u8",
+            "math_abs",
+            "int_abs",
+            "math_sqrt",
+            "math_pow",
+            "math_floor",
+            "math_ceil",
+            "math_min",
+            "math_max",
+            "math_sin",
+            "math_cos",
+            "math_random",
+            "str_len",
+            "str_upper",
+            "str_lower",
+            "str_trim",
+            "str_sub",
+            "str_contains",
+            "str_starts_with",
+            "str_ends_with",
+            "time_now_ms",
+            "time_sleep_ms",
+            "hex_encode",
+            "hex_decode",
+            "base64_encode",
+            "base64_decode",
+            "json_parse",
+            "json_stringify",
+            "nx_rt_assert",
+            "assert",
+            "nx_rt_assert_eq",
+            "assert_eq",
         ]
         .into_iter()
         .collect();
@@ -242,8 +307,10 @@ impl LlvmCompiler {
             .map(|(pname, pty)| format!("{} %{}", map_llvm_type(pty), pname))
             .collect();
 
+        let linkage = if func.name == "main" { "" } else { "internal " };
         out.push_str(&format!(
-            "define {} @{}({}) {{\n",
+            "define {}{} @{}({}) {{\n",
+            linkage,
             ret_ty_str,
             func.name,
             param_strs.join(", ")

@@ -1,0 +1,22 @@
+// NextLang Standard Library: fs
+// Filesystem and path operations
+
+fn read_file(path:<STRING>):<STRING> {
+    return file_read_all(path);
+}
+
+fn write_file(path:<STRING>, content:<STRING>):<BOOL> {
+    return file_write(path, content);
+}
+
+fn exists(path:<STRING>):<BOOL> {
+    return file_exists(path);
+}
+
+fn remove(path:<STRING>):<BOOL> {
+    return file_remove(path);
+}
+
+fn current_dir():<STRING> {
+    return get_cwd();
+}

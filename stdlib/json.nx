@@ -1,0 +1,10 @@
+// NextLang Standard Library: json
+// JSON parsing, validation, and serialization
+
+fn parse_json(s:<STRING>):<STRING> {
+    return json_parse(s);
+}
+
+fn stringify_json(s:<STRING>):<STRING> {
+    return json_stringify(s);
+}

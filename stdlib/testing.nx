@@ -1,0 +1,3 @@
+// NextLang Standard Library: testing
+// Unit testing assertions and verification framework
+// Note: assert(cond, msg) and assert_eq(a, b, msg) are core primitives available globally.

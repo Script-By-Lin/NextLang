@@ -95,6 +95,50 @@ void* ptr_offset(void *p, int64_t bytes);
 uint8_t ptr_read_u8(void *p);
 void ptr_write_u8(void *p, uint8_t val);
 
+// Phase 9 Standard Library Primitives
+// Math
+double math_abs(double x);
+int64_t int_abs(int64_t x);
+double math_sqrt(double x);
+double math_pow(double base, double exp);
+double math_floor(double x);
+double math_ceil(double x);
+double math_min(double a, double b);
+double math_max(double a, double b);
+double math_sin(double x);
+double math_cos(double x);
+double math_random(void);
+
+// String
+int64_t str_len(const char *s);
+const char* str_upper(const char *s);
+const char* str_lower(const char *s);
+const char* str_trim(const char *s);
+const char* str_sub(const char *s, int64_t start, int64_t len);
+int8_t str_contains(const char *s, const char *sub);
+int8_t str_starts_with(const char *s, const char *prefix);
+int8_t str_ends_with(const char *s, const char *suffix);
+
+// Time
+int64_t time_now_ms(void);
+void time_sleep_ms(int64_t ms);
+
+// Encoding
+const char* hex_encode(const char *s);
+const char* hex_decode(const char *s);
+const char* base64_encode(const char *s);
+const char* base64_decode(const char *s);
+
+// JSON
+const char* json_parse(const char *s);
+const char* json_stringify(const char *s);
+
+// Testing & Assertions
+void nx_rt_assert(int8_t cond, const char *msg);
+void nx_rt_assert_eq(const char *actual, const char *expected, const char *msg);
+void assert(int8_t cond, const char *msg);
+void assert_eq(const char *actual, const char *expected, const char *msg);
+
 #ifdef __cplusplus
 }
 #endif

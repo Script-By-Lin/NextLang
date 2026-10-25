@@ -406,3 +406,216 @@ fn test_cli_build_with_emit_llvm() {
     let bin_stdout = String::from_utf8_lossy(&bin_output.stdout);
     assert!(bin_stdout.contains("Hello Alex"));
 }
+
+#[test]
+fn test_cli_phase9_project_lifecycle() {
+    let temp_root = std::env::temp_dir().join(format!("nx_test_proj_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&temp_root);
+    std::fs::create_dir_all(&temp_root).expect("create temp dir");
+
+    let proj_dir = temp_root.join("sample_pkg");
+
+    // 1. nx new sample_pkg
+    let output = nx_bin()
+        .current_dir(&temp_root)
+        .arg("new")
+        .arg("sample_pkg")
+        .output()
+        .expect("nx new");
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(proj_dir.join("nextlang.toml").exists());
+    assert!(proj_dir.join("nextlang.lock").exists());
+    assert!(proj_dir.join("src/main.nx").exists());
+    assert!(proj_dir.join("tests/main_test.nx").exists());
+
+    // 2. nx check
+    let chk = nx_bin()
+        .current_dir(&proj_dir)
+        .arg("check")
+        .output()
+        .expect("nx check");
+    assert!(
+        chk.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&chk.stderr)
+    );
+
+    // 3. nx test
+    let test_out = nx_bin()
+        .current_dir(&proj_dir)
+        .arg("test")
+        .output()
+        .expect("nx test");
+    assert!(
+        test_out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&test_out.stderr)
+    );
+    let test_stdout = String::from_utf8_lossy(&test_out.stdout);
+    assert!(test_stdout.contains("1 passed; 0 failed"));
+
+    // 4. nx run
+    let run_out = nx_bin()
+        .current_dir(&proj_dir)
+        .arg("run")
+        .output()
+        .expect("nx run");
+    assert!(
+        run_out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&run_out.stderr)
+    );
+    let run_stdout = String::from_utf8_lossy(&run_out.stdout);
+    assert!(run_stdout.contains("Hello from NextLang!"));
+    assert!(run_stdout.contains("sqrt(16.0) =  4"));
+
+    // 5. nx build --target js
+    let b_js = nx_bin()
+        .current_dir(&proj_dir)
+        .arg("build")
+        .arg("--target")
+        .arg("js")
+        .arg("-o")
+        .arg("dist/main.js")
+        .output()
+        .expect("nx build --target js");
+    assert!(
+        b_js.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&b_js.stderr)
+    );
+    assert!(proj_dir.join("dist/main.js").exists());
+
+    // 6. nx build --target native
+    let b_nat = nx_bin()
+        .current_dir(&proj_dir)
+        .arg("build")
+        .arg("--target")
+        .arg("native")
+        .arg("-o")
+        .arg("dist/main_bin")
+        .output()
+        .expect("nx build --target native");
+    assert!(
+        b_nat.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&b_nat.stderr)
+    );
+    assert!(proj_dir.join("dist/main_bin").exists());
+
+    let _ = std::fs::remove_dir_all(&temp_root);
+}
+
+#[test]
+fn test_cli_phase9_package_management() {
+    let temp_root = std::env::temp_dir().join(format!("nx_pkg_test_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&temp_root);
+    std::fs::create_dir_all(&temp_root).expect("create temp dir");
+
+    let output = nx_bin()
+        .current_dir(&temp_root)
+        .arg("init")
+        .output()
+        .expect("nx init");
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(temp_root.join("nextlang.toml").exists());
+
+    // nx add helper --path ../helper
+    let add_out = nx_bin()
+        .current_dir(&temp_root)
+        .arg("add")
+        .arg("helper")
+        .arg("--path")
+        .arg("../helper")
+        .output()
+        .expect("nx add");
+    assert!(
+        add_out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&add_out.stderr)
+    );
+
+    // nx tree
+    let tree_out = nx_bin()
+        .current_dir(&temp_root)
+        .arg("tree")
+        .output()
+        .expect("nx tree");
+    assert!(
+        tree_out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&tree_out.stderr)
+    );
+    let tree_stdout = String::from_utf8_lossy(&tree_out.stdout);
+    assert!(tree_stdout.contains("helper"));
+
+    // nx update
+    let upd_out = nx_bin()
+        .current_dir(&temp_root)
+        .arg("update")
+        .output()
+        .expect("nx update");
+    assert!(
+        upd_out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&upd_out.stderr)
+    );
+
+    // nx remove helper
+    let rem_out = nx_bin()
+        .current_dir(&temp_root)
+        .arg("remove")
+        .arg("helper")
+        .output()
+        .expect("nx remove");
+    assert!(
+        rem_out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&rem_out.stderr)
+    );
+
+    let _ = std::fs::remove_dir_all(&temp_root);
+}
+
+#[test]
+fn test_cli_phase9_fmt_and_check() {
+    let temp_file = std::env::temp_dir().join(format!("nx_fmt_test_{}.nx", std::process::id()));
+    let ugly_code = "fn   add( a:<INT> , b:<INT> ):<INT>   { return   a+b ; }   \n";
+    std::fs::write(&temp_file, ugly_code).expect("write file");
+
+    // nx fmt --check should detect difference and exit with code 1
+    let check_fail = nx_bin()
+        .arg("fmt")
+        .arg(&temp_file)
+        .arg("--check")
+        .output()
+        .expect("nx fmt --check");
+    assert!(!check_fail.status.success());
+
+    // nx fmt formats the file
+    let fmt_exec = nx_bin()
+        .arg("fmt")
+        .arg(&temp_file)
+        .output()
+        .expect("nx fmt");
+    assert!(fmt_exec.status.success());
+
+    // nx fmt --check now passes
+    let check_pass = nx_bin()
+        .arg("fmt")
+        .arg(&temp_file)
+        .arg("--check")
+        .output()
+        .expect("nx fmt --check again");
+    assert!(check_pass.status.success());
+
+    let _ = std::fs::remove_file(temp_file);
+}

@@ -1,7 +1,9 @@
 pub mod check;
+pub mod modules;
 pub mod parser;
 
 pub use check::{ScopeChecker, Symbol, SymbolKind};
+pub use modules::{get_stdlib_source, ModuleResolver};
 pub use parser::Parser;
 
 use nx_ast::Program;
@@ -14,6 +16,16 @@ pub fn parse_source(source: &str, diagnostics: &mut DiagnosticBag) -> Program {
     let tokens = lexer.tokenize(diagnostics);
     let mut parser = Parser::new(tokens, diagnostics);
     parser.parse_program()
+}
+
+/// Parses, resolves imports (including standard library and local files), and merges into a single AST.
+pub fn parse_source_with_modules(
+    entry_path: &std::path::Path,
+    source: &str,
+    diagnostics: &mut DiagnosticBag,
+) -> Program {
+    let mut resolver = ModuleResolver::new();
+    resolver.resolve_entry(entry_path, source, diagnostics)
 }
 
 /// Tokenizes, parses, and performs scope/declaration validation.

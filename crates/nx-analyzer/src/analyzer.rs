@@ -547,6 +547,14 @@ impl<'a> SemanticAnalyzer<'a> {
             Stmt::Expr(expr) => {
                 self.check_expr(expr, None);
             }
+            Stmt::Import(_) => {}
+            Stmt::TestDecl(t) => {
+                self.push_scope();
+                for s in &t.body.statements {
+                    self.analyze_stmt(s);
+                }
+                self.pop_scope();
+            }
         }
     }
 

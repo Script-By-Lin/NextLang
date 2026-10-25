@@ -47,6 +47,10 @@ pub enum TokenKind {
     Struct,
     Extern,
 
+    // Phase 9: Standard Library, Modules & Testing
+    Import,
+    Test,
+
     // Identifiers and Literals
     Ident(String),
     Int(i128),
@@ -138,6 +142,8 @@ impl TokenKind {
             TokenKind::Unsafe => "unsafe",
             TokenKind::Struct => "struct",
             TokenKind::Extern => "extern",
+            TokenKind::Import => "import",
+            TokenKind::Test => "test",
             TokenKind::Ident(_) => "identifier",
             TokenKind::Int(_) => "integer",
             TokenKind::Float(_) => "float",
@@ -365,6 +371,8 @@ impl<'a> Lexer<'a> {
                     "unsafe" => TokenKind::Unsafe,
                     "struct" => TokenKind::Struct,
                     "extern" => TokenKind::Extern,
+                    "import" => TokenKind::Import,
+                    "test" => TokenKind::Test,
                     _ => TokenKind::Ident(ident_str.to_string()),
                 };
                 return Token::new(kind, span, ident_str);
@@ -742,5 +750,19 @@ mod tests {
         assert_eq!(tokens[2].kind, TokenKind::Fr);
         assert_eq!(tokens[3].kind, TokenKind::Ident("as".into()));
         assert_eq!(tokens[4].kind, TokenKind::Ident("do".into()));
+    }
+
+    #[test]
+    fn test_phase9_keywords() {
+        let mut bag = DiagnosticBag::new();
+        let src = "import math; test \"demo\" {}";
+        let mut lexer = Lexer::new(src);
+        let tokens = lexer.tokenize(&mut bag);
+        assert!(!bag.has_errors());
+        assert_eq!(tokens[0].kind, TokenKind::Import);
+        assert_eq!(tokens[1].kind, TokenKind::Ident("math".into()));
+        assert_eq!(tokens[2].kind, TokenKind::Semicolon);
+        assert_eq!(tokens[3].kind, TokenKind::Test);
+        assert_eq!(tokens[4].kind, TokenKind::Str("demo".into()));
     }
 }

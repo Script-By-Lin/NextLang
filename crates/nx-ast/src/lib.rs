@@ -1,3 +1,6 @@
+pub mod formatter;
+pub use formatter::{format_source, SourceFormatter};
+
 use nx_diagnostics::Span;
 use std::fmt;
 
@@ -648,6 +651,21 @@ pub struct ExternBlock {
     pub span: Span,
 }
 
+/// Import statement: `import math;` or `import "path/file.nx";`
+#[derive(Debug, Clone, PartialEq)]
+pub struct ImportStmt {
+    pub path: String,
+    pub span: Span,
+}
+
+/// Test declaration: `test "name" { body }`
+#[derive(Debug, Clone, PartialEq)]
+pub struct TestDecl {
+    pub name: String,
+    pub body: Block,
+    pub span: Span,
+}
+
 /// Statements in NextLang.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
@@ -668,6 +686,8 @@ pub enum Stmt {
     StructDecl(StructDecl),
     Unsafe(UnsafeBlock),
     ExternBlock(ExternBlock),
+    Import(ImportStmt),
+    TestDecl(TestDecl),
 }
 
 impl Stmt {
@@ -690,6 +710,8 @@ impl Stmt {
             Stmt::StructDecl(s) => s.span,
             Stmt::Unsafe(u) => u.span,
             Stmt::ExternBlock(e) => e.span,
+            Stmt::Import(i) => i.span,
+            Stmt::TestDecl(t) => t.span,
         }
     }
 }
@@ -1112,6 +1134,15 @@ impl AstFormatter {
                         self.dedent();
                     }
                 }
+                self.dedent();
+            }
+            Stmt::Import(i) => {
+                self.line(&format!("Import \"{}\" [{}]", i.path, i.span));
+            }
+            Stmt::TestDecl(t) => {
+                self.line(&format!("Test \"{}\" [{}]", t.name, t.span));
+                self.indent();
+                self.format_block(&t.body);
                 self.dedent();
             }
         }

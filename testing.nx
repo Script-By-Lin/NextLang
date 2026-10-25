@@ -32,3 +32,8 @@ vout("Average mark:", exam.average_mark());
 vout("Pass:", exam.pass());
 var pid:<INT32> = get_pid();
 vout("PID:", pid);
+
+test "verify absolute values" {
+    assert(abs(-42.0) == 42.0, "positive result expected");
+    assert_eq("hello", "hello", "string equality check");
+}

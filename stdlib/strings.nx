@@ -1,0 +1,30 @@
+// NextLang Standard Library: strings
+// String manipulation, inspection, and transformation utilities
+
+fn upper(s:<STRING>):<STRING> {
+    return str_upper(s);
+}
+
+fn lower(s:<STRING>):<STRING> {
+    return str_lower(s);
+}
+
+fn trim(s:<STRING>):<STRING> {
+    return str_trim(s);
+}
+
+fn sub(s:<STRING>, start:<INT64>, len:<INT64>):<STRING> {
+    return str_sub(s, start, len);
+}
+
+fn contains(s:<STRING>, sub_str:<STRING>):<BOOL> {
+    return str_contains(s, sub_str);
+}
+
+fn starts_with(s:<STRING>, prefix:<STRING>):<BOOL> {
+    return str_starts_with(s, prefix);
+}
+
+fn ends_with(s:<STRING>, suffix:<STRING>):<BOOL> {
+    return str_ends_with(s, suffix);
+}

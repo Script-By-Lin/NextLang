@@ -1,0 +1,46 @@
+// NextLang Standard Library: math
+// Mathematical functions and utilities
+
+fn abs(x:<FL64>):<FL64> {
+    return math_abs(x);
+}
+
+fn abs_int(x:<INT64>):<INT64> {
+    return int_abs(x);
+}
+
+fn sqrt(x:<FL64>):<FL64> {
+    return math_sqrt(x);
+}
+
+fn pow(base:<FL64>, exp:<FL64>):<FL64> {
+    return math_pow(base, exp);
+}
+
+fn floor(x:<FL64>):<FL64> {
+    return math_floor(x);
+}
+
+fn ceil(x:<FL64>):<FL64> {
+    return math_ceil(x);
+}
+
+fn min(a:<FL64>, b:<FL64>):<FL64> {
+    return math_min(a, b);
+}
+
+fn max(a:<FL64>, b:<FL64>):<FL64> {
+    return math_max(a, b);
+}
+
+fn sin(x:<FL64>):<FL64> {
+    return math_sin(x);
+}
+
+fn cos(x:<FL64>):<FL64> {
+    return math_cos(x);
+}
+
+fn random():<FL64> {
+    return math_random();
+}

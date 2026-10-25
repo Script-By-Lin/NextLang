@@ -376,3 +376,73 @@ unsafe {
         _ => panic!("expected Unsafe block"),
     }
 }
+
+#[test]
+fn test_phase9_import_and_test_parsing() {
+    let src = r#"
+import math;
+import "utils.nx";
+
+test "basic assertion" {
+    assert(true, "must be true");
+}
+"#;
+    let mut bag = DiagnosticBag::new();
+    let prog = parse_source(src, &mut bag);
+    assert!(!bag.has_errors());
+    assert_eq!(prog.statements.len(), 3);
+
+    match &prog.statements[0] {
+        Stmt::Import(i) => assert_eq!(i.path, "math"),
+        _ => panic!("expected Stmt::Import"),
+    }
+
+    match &prog.statements[1] {
+        Stmt::Import(i) => assert_eq!(i.path, "utils.nx"),
+        _ => panic!("expected Stmt::Import"),
+    }
+
+    match &prog.statements[2] {
+        Stmt::TestDecl(t) => {
+            assert_eq!(t.name, "basic assertion");
+            assert_eq!(t.body.statements.len(), 1);
+        }
+        _ => panic!("expected Stmt::TestDecl"),
+    }
+}
+
+#[test]
+fn test_phase9_module_resolution_and_cycle_detection() {
+    use std::path::Path;
+
+    // 1. Stdlib import resolution
+    let src = r#"
+import math;
+var x:<FL64> = sqrt(25.0);
+"#;
+    let mut bag = DiagnosticBag::new();
+    let prog = nx_parser::parse_source_with_modules(Path::new("main.nx"), src, &mut bag);
+    assert!(!bag.has_errors());
+    // prog should contain the merged math declarations plus the entry statements
+    assert!(prog.statements.len() > 2);
+
+    // 2. Circular import detection
+    let tmp_dir = std::env::temp_dir().join(format!("nx_mod_test_{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&tmp_dir);
+    let mod_a = tmp_dir.join("a.nx");
+    let mod_b = tmp_dir.join("b.nx");
+
+    let _ = std::fs::write(&mod_a, "import \"b.nx\";\nfn fa():<VOID> {}\n");
+    let _ = std::fs::write(&mod_b, "import \"a.nx\";\nfn fb():<VOID> {}\n");
+
+    let mut cycle_bag = DiagnosticBag::new();
+    let content = std::fs::read_to_string(&mod_a).unwrap();
+    let _ = nx_parser::parse_source_with_modules(&mod_a, &content, &mut cycle_bag);
+    assert!(cycle_bag.has_errors());
+    assert!(cycle_bag
+        .diagnostics()
+        .iter()
+        .any(|d| d.message.contains("circular dependency detected")));
+
+    let _ = std::fs::remove_dir_all(&tmp_dir);
+}

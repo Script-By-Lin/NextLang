@@ -186,6 +186,8 @@ impl<'a> Parser<'a> {
                 | TokenKind::Class
                 | TokenKind::Interface
                 | TokenKind::Match
+                | TokenKind::Import
+                | TokenKind::Test
                 | TokenKind::CloseBrace => return,
                 _ => {
                     self.advance();
@@ -261,8 +263,73 @@ impl<'a> Parser<'a> {
             TokenKind::Unsafe => self.parse_unsafe_block(),
             TokenKind::Struct => self.parse_struct_decl(),
             TokenKind::Extern => self.parse_extern_block(),
+            TokenKind::Import => self.parse_import_stmt(),
+            TokenKind::Test => self.parse_test_decl(),
             _ => self.parse_expr_or_assignment_stmt(),
         }
+    }
+
+    fn parse_import_stmt(&mut self) -> Option<Stmt> {
+        let start_span = self.advance().span; // consume 'import'
+        let (path, path_span) = match self.peek_kind() {
+            TokenKind::Ident(ref s) => {
+                let text = s.clone();
+                let span = self.advance().span;
+                (text, span)
+            }
+            TokenKind::Str(ref s) => {
+                let text = s.clone();
+                let span = self.advance().span;
+                (text, span)
+            }
+            _ => {
+                let span = self.peek().span;
+                self.diagnostics.error(
+                    span,
+                    "expected module name or file path string after 'import'",
+                );
+                return None;
+            }
+        };
+
+        let had_semi = self.expect_semicolon();
+        let end_span = if had_semi {
+            self.previous().span
+        } else {
+            path_span
+        };
+
+        Some(Stmt::Import(ImportStmt {
+            path,
+            span: start_span.merge(end_span),
+        }))
+    }
+
+    fn parse_test_decl(&mut self) -> Option<Stmt> {
+        let start_span = self.advance().span; // consume 'test'
+        let name = match self.peek_kind() {
+            TokenKind::Str(ref s) => {
+                let text = s.clone();
+                self.advance();
+                text
+            }
+            TokenKind::Ident(ref s) => {
+                let text = s.clone();
+                self.advance();
+                text
+            }
+            _ => {
+                let span = self.peek().span;
+                self.diagnostics
+                    .error(span, "expected test name string or identifier after 'test'");
+                return None;
+            }
+        };
+
+        let body = self.parse_block()?;
+        let span = start_span.merge(body.span);
+
+        Some(Stmt::TestDecl(TestDecl { name, body, span }))
     }
 
     fn parse_var_decl(&mut self, kind: VarKind) -> Option<Stmt> {

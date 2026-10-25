@@ -364,3 +364,35 @@ unsafe {
     assert!(out.contains("pt updated: 99 20"));
     assert!(out.contains("valid pid: true"));
 }
+
+#[test]
+fn test_runtime_phase9_stdlib_and_assertions() {
+    let src = r#"
+var s:<FL64> = math_sqrt(16.0);
+var p:<FL64> = math_pow(2.0, 3.0);
+var upper:<STRING> = str_upper("hello nextlang");
+var hex:<STRING> = hex_encode("abc");
+var b64:<STRING> = base64_encode("hello");
+var now:<INT64> = time_now_ms();
+
+vout("sqrt:", s);
+vout("pow:", p);
+vout("upper:", upper);
+vout("hex:", hex);
+vout("b64:", b64);
+vout("time valid:", now > 0);
+
+test "assert works" {
+    assert(s == 4.0, "sqrt of 16 is 4");
+    assert_eq(upper, "HELLO NEXTLANG", "str_upper matches");
+}
+"#;
+    let (res, out) = run_nx(src);
+    assert!(res.is_ok(), "runtime error: {:?}", res.err());
+    assert!(out.contains("sqrt: 4"));
+    assert!(out.contains("pow: 8"));
+    assert!(out.contains("upper: HELLO NEXTLANG"));
+    assert!(out.contains("hex: 616263"));
+    assert!(out.contains("b64: aGVsbG8="));
+    assert!(out.contains("time valid: true"));
+}
