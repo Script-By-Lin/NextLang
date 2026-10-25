@@ -18,11 +18,11 @@ Comments in NextLang document code logic without affecting compiler execution. N
 </p>
 
 <pre><code>// Single-line comment explaining the following statement
-var status:&lt;INT32&gt; = 1;
+var status: Int32 = 1;
 
 // Multi-line explanations can be written
 // using consecutive double-slash comment lines
-var active:&lt;BOOL&gt; = true;
+var active: Bool = true;
 </code></pre>
 
 <h3>Identifiers</h3>
@@ -140,61 +140,61 @@ const OLD_PI:&lt;FL64&gt; = 3.14159;
 <p>
 For systems programming and direct operating system interaction, NextLang supports architecture-native widths:
 </p>
-- <b>USIZE</b>: Pointer-sized unsigned integer (64-bit on x86_64 and aarch64)
-- <b>ISIZE</b>: Pointer-sized signed integer (64-bit on x86_64 and aarch64)
-- <b>PTR</b>: Raw untyped memory pointer address
+- <b>Usize</b> (alias: USIZE): Pointer-sized unsigned integer (64-bit on x86_64 and aarch64)
+- <b>Isize</b> (alias: ISIZE): Pointer-sized signed integer (64-bit on x86_64 and aarch64)
+- <b>Ptr</b> (alias: PTR): Raw untyped memory pointer address
 
-<pre><code>var buffer_length:&lt;USIZE&gt; = 1024;
-var memory_offset:&lt;ISIZE&gt; = -8;
-var raw_address:&lt;PTR&gt; = buffer_new(64);
+<pre><code>var buffer_length: Usize = 1024;
+var memory_offset: Isize = -8;
+var raw_address: Ptr = buffer_new(64);
 </code></pre>
 
 <h3>Numeric Literal Formats</h3>
 <p>
 Integer literals can be written in decimal, hexadecimal, or binary format:
 </p>
-<pre><code>var decimal_val:&lt;INT32&gt; = 42;
-var hex_val:&lt;INT32&gt; = 0x2A;
-var binary_val:&lt;INT32&gt; = 0b101010;
+<pre><code>var decimal_val: Int32 = 42;
+var hex_val: Int32 = 0x2A;
+var binary_val: Int32 = 0b101010;
 </code></pre>
 
 <h3>Floating Point Numbers</h3>
-- <b>FL32</b>: IEEE-754 32-bit single-precision float
-- <b>FL64</b>: IEEE-754 64-bit double-precision float
-- <b>FL128</b>: 128-bit quad-precision floating point
+- <b>Float32</b> (alias: FL32): IEEE-754 32-bit single-precision float
+- <b>Float64</b> (alias: FL64): IEEE-754 64-bit double-precision float
+- <b>Float128</b> (alias: FL128): 128-bit quad-precision floating point
 
-<pre><code>var ratio:&lt;FL32&gt; = 1.25;
-var precise:&lt;FL64&gt; = 3.141592653589793;
+<pre><code>var ratio: Float32 = 1.25;
+var precise: Float64 = 3.141592653589793;
 </code></pre>
 
 <h3>Booleans, Characters, and Strings</h3>
-- <b>BOOL</b>: Boolean value, either <b>true</b> or <b>false</b>
-- <b>CHAR</b>: 32-bit Unicode character enclosed in single quotes, such as 'A' or '\n'
-- <b>STRING</b>: Sequence of UTF-8 characters enclosed in double quotes, such as "Hello"
+- <b>Bool</b> (alias: BOOL): Boolean value, either <b>true</b> or <b>false</b>
+- <b>Char</b> (alias: CHAR): 32-bit Unicode character enclosed in single quotes, such as 'A' or '\n'
+- <b>String</b> (alias: STRING): Sequence of UTF-8 characters enclosed in double quotes, such as "Hello"
 
-<pre><code>var is_running:&lt;BOOL&gt; = true;
-var separator:&lt;CHAR&gt; = ':';
-var greeting:&lt;STRING&gt; = "Welcome to NextLang";
+<pre><code>var is_running: Bool = true;
+var separator: Char = ':';
+var greeting: String = "Welcome to NextLang";
 </code></pre>
 
 <h3>Generic Collections</h3>
 <p>
 NextLang provides built-in parameterized collection types:
 </p>
-- <b>LIST&lt;T&gt;</b>: Dynamic array storing ordered items of type T
-- <b>SET&lt;T&gt;</b>: Collection of unique elements of type T
-- <b>MAP&lt;K, V&gt;</b>: Key-value dictionary mapping keys of type K to values of type V
+- <b>List&lt;T&gt;</b> (alias: LIST&lt;T&gt;): Dynamic array storing ordered items of type T
+- <b>Set&lt;T&gt;</b> (alias: SET&lt;T&gt;): Collection of unique elements of type T
+- <b>Map&lt;K, V&gt;</b> (alias: MAP&lt;K, V&gt;): Key-value dictionary mapping keys of type K to values of type V
 
-<pre><code>var scores:&lt;LIST&lt;INT32&gt;&gt; = [95, 88, 72, 100];
-var allowed_tags:&lt;SET&lt;STRING&gt;&gt; = {"system", "admin", "user"};
-var lookup:&lt;MAP&lt;STRING, INT32&gt;&gt; = {"alice": 101, "bob": 102};
+<pre><code>var scores: List&lt;Int32&gt; = [95, 88, 72, 100];
+var allowed_tags: Set&lt;String&gt; = {"system", "admin", "user"};
+var lookup: Map&lt;String, Int32&gt; = {"alice": 101, "bob": 102};
 </code></pre>
 
 <h3>Union Types</h3>
 <p>
 A union type declares that a value can be one of several designated types:
 </p>
-<pre><code>var result:&lt;INT32 | STRING&gt; = 404;
+<pre><code>var result: Int32 | String = 404;
 result = "Not Found";
 </code></pre>
 
@@ -205,8 +205,8 @@ NextLang implements static borrow checking:
 - <b>&T</b>: Immutable reference to type T
 - <b>&mut T</b>: Mutable reference allowing in-place modification
 
-<pre><code>var original:&lt;INT32&gt; = 50;
-var ref_view:&lt;&INT32&gt; = &original;
+<pre><code>var original: Int32 = 50;
+var ref_view: &Int32 = &original;
 </code></pre>
 
 <hr>
@@ -224,10 +224,10 @@ NextLang supports standard mathematical operations:
 - <b>++</b> : Increment
 - <b>--</b> : Decrement
 
-<pre><code>var sum:&lt;INT32&gt; = 10 + 20;
-var difference:&lt;INT32&gt; = 50 - 15;
-var quotient:&lt;INT32&gt; = 100 / 4;
-var remainder:&lt;INT32&gt; = 17 % 5;
+<pre><code>var sum: Int32 = 10 + 20;
+var difference: Int32 = 50 - 15;
+var quotient: Int32 = 100 / 4;
+var remainder: Int32 = 17 % 5;
 sum++;
 </code></pre>
 
@@ -260,15 +260,15 @@ For low-level hardware control, network protocol packing, and binary cryptograph
 - <b>&lt;&lt;</b> : Left bit shift
 - <b>&gt;&gt;</b> : Right bit shift (arithmetic for signed, logical for unsigned)
 
-<pre><code>var a:&lt;INT32&gt; = 12; // Binary 1100
-var b:&lt;INT32&gt; = 5;  // Binary 0101
+<pre><code>var a: Int32 = 12; // Binary 1100
+var b: Int32 = 5;  // Binary 0101
 
-var bit_and:&lt;INT32&gt; = a & b;   // Result: 4  (0100)
-var bit_or:&lt;INT32&gt;  = a | b;   // Result: 13 (1101)
-var bit_xor:&lt;INT32&gt; = a ^ b;   // Result: 9  (1001)
-var shifted_l:&lt;INT32&gt; = a &lt;&lt; 2; // Result: 48 (110000)
-var shifted_r:&lt;INT32&gt; = a &gt;&gt; 1; // Result: 6  (0011)
-var inverted:&lt;INT32&gt; = ~a;     // Result: -13
+var bit_and: Int32 = a & b;   // Result: 4  (0100)
+var bit_or: Int32  = a | b;   // Result: 13 (1101)
+var bit_xor: Int32 = a ^ b;   // Result: 9  (1001)
+var shifted_l: Int32 = a &lt;&lt; 2; // Result: 48 (110000)
+var shifted_r: Int32 = a &gt;&gt; 1; // Result: 6  (0011)
+var inverted: Int32 = ~a;     // Result: -13
 </code></pre>
 
 <hr>
@@ -279,7 +279,7 @@ var inverted:&lt;INT32&gt; = ~a;     // Result: -13
 <p>
 NextLang uses <b>if</b>, <b>otherwise</b>, and <b>else</b> for conditional branches:
 </p>
-<pre><code>var score:&lt;INT32&gt; = 85;
+<pre><code>var score: Int32 = 85;
 
 if score &gt;= 90 {
     vout("Grade: A");
@@ -296,7 +296,7 @@ if score &gt;= 90 {
 <p>
 The <b>fr</b> loop provides bounded iteration with initialization, condition, and step clauses enclosed in angle brackets:
 </p>
-<pre><code>fr&lt;var i:&lt;INT32&gt; = 0: i &lt; 5: i++&gt; {
+<pre><code>fr&lt;var i: Int32 = 0: i &lt; 5: i++&gt; {
     vout("Iteration:", i);
 }
 </code></pre>
@@ -305,7 +305,7 @@ The <b>fr</b> loop provides bounded iteration with initialization, condition, an
 <p>
 The <b>As</b> loop executes continuously while its condition expression evaluates to true:
 </p>
-<pre><code>var count:&lt;INT32&gt; = 3;
+<pre><code>var count: Int32 = 3;
 As count &gt; 0 {
     vout("Countdown:", count);
     count--;
@@ -319,7 +319,7 @@ The <b>loop</b> construct runs unconditionally until interrupted:
 - <b>skip;</b>: Skips the remainder of the current loop iteration (analogous to continue).
 - <b>halt;</b>: Immediately terminates the enclosing loop (analogous to break).
 
-<pre><code>var n:&lt;INT32&gt; = 0;
+<pre><code>var n: Int32 = 0;
 loop {
     n++;
     if n == 2 {
@@ -336,7 +336,7 @@ loop {
 <p>
 NextLang provides robust pattern matching with literal values, wildcards, and conditional guards:
 </p>
-<pre><code>var code:&lt;INT32&gt; = 200;
+<pre><code>var code: Int32 = 200;
 
 match code {
     case 200 {
@@ -357,7 +357,7 @@ match code {
 <p>
 Pattern matches can also incorporate guard conditions:
 </p>
-<pre><code>var temp:&lt;INT32&gt; = 35;
+<pre><code>var temp: Int32 = 35;
 match temp {
     case t if t &gt;= 30 {
         vout("Hot climate");
@@ -422,7 +422,7 @@ NextLang bridges high-level expressiveness with direct native systems memory con
 <p>
 Allocates dynamic memory on the native heap and initializes it with the provided value:
 </p>
-<pre><code>var heap_string:&lt;STRING&gt; = alloc("Persisted Dynamic Content");
+<pre><code>var heap_string: String = alloc("Persisted Dynamic Content");
 vout("Heap String:", heap_string);
 </code></pre>
 
@@ -570,13 +570,13 @@ NextLang provides direct low-level control while strictly establishing a clear s
 A <b>struct</b> defines a contiguous native memory layout:
 </p>
 <pre><code>struct Vector3 {
-    x:&lt;FL64&gt;,
-    y:&lt;FL64&gt;,
-    z:&lt;FL64&gt;
+    x: Float64,
+    y: Float64,
+    z: Float64
 }
 
 // Instantiation via struct literal
-var vec:&lt;Vector3&gt; = Vector3 {
+var vec: Vector3 = Vector3 {
     x: 10.0,
     y: 20.0,
     z: 30.0
@@ -590,9 +590,9 @@ vout("Vector x:", vec.x, "y:", vec.y, "z:", vec.z);
 NextLang can link against any native C library or operating system ABI:
 </p>
 <pre><code>extern "C" {
-    fn abs(n:&lt;INT32&gt;):&lt;INT32&gt;;
-    fn puts(str:&lt;STRING&gt;):&lt;INT32&gt;;
-    fn getpid():&lt;INT32&gt;;
+    fn abs(n: Int32) -&gt; Int32;
+    fn puts(str: String) -&gt; Int32;
+    fn getpid() -&gt; Int32;
 }
 </code></pre>
 
@@ -601,10 +601,10 @@ NextLang can link against any native C library or operating system ABI:
 Calling external C ABI functions or manipulating raw memory pointers is strictly forbidden in safe code. The compiler enforces safety rule <b>NX-SYS-001</b>: all FFI calls and raw pointer operations must be enclosed inside an explicit <b>unsafe { ... }</b> block.
 </p>
 <pre><code>unsafe {
-    var raw_pid:&lt;INT32&gt; = getpid();
+    var raw_pid: Int32 = getpid();
     vout("Operating System Process ID:", raw_pid);
 
-    var positive:&lt;INT32&gt; = abs(-75);
+    var positive: Int32 = abs(-75);
     vout("Absolute value:", positive);
 
     puts("Direct C ABI output message");
@@ -614,28 +614,28 @@ Calling external C ABI functions or manipulating raw memory pointers is strictly
 <h3>Native Systems Standard Library Builtins</h3>
 
 <p><b>1. File Operating System I/O</b></p>
-- <b>file_open(path:&lt;STRING&gt;, mode:&lt;STRING&gt;):&lt;INT64&gt;</b>: Opens file handle.
-- <b>file_close(handle:&lt;INT64&gt;):&lt;BOOL&gt;</b>: Flushes and closes file handle.
-- <b>file_read_all(path:&lt;STRING&gt;):&lt;STRING&gt;</b>: Reads entire file content as string.
-- <b>file_write(path:&lt;STRING&gt;, data:&lt;STRING&gt;):&lt;BOOL&gt;</b>: Writes string content to file.
-- <b>file_exists(path:&lt;STRING&gt;):&lt;BOOL&gt;</b>: Returns true if file exists on disk.
-- <b>file_remove(path:&lt;STRING&gt;):&lt;BOOL&gt;</b>: Deletes file from filesystem.
+- <b>file_open(path: String, mode: String) -&gt; Int64</b>: Opens file handle.
+- <b>file_close(handle: Int64) -&gt; Bool</b>: Flushes and closes file handle.
+- <b>file_read_all(path: String) -&gt; String</b>: Reads entire file content as string.
+- <b>file_write(path: String, data: String) -&gt; Bool</b>: Writes string content to file.
+- <b>file_exists(path: String) -&gt; Bool</b>: Returns true if file exists on disk.
+- <b>file_remove(path: String) -&gt; Bool</b>: Deletes file from filesystem.
 
-<pre><code>var filepath:&lt;STRING&gt; = "output_data.txt";
+<pre><code>var filepath: String = "output_data.txt";
 file_write(filepath, "High-performance systems programming in NextLang");
 
 if file_exists(filepath) {
-    var content:&lt;STRING&gt; = file_read_all(filepath);
+    var content: String = file_read_all(filepath);
     vout("Read back:", content);
     file_remove(filepath);
 }
 </code></pre>
 
 <p><b>2. Environment and Process Management</b></p>
-- <b>get_pid():&lt;INT32&gt;</b>: Returns process ID of the current running process.
-- <b>get_cwd():&lt;STRING&gt;</b>: Returns current working directory path string.
-- <b>env_get(key:&lt;STRING&gt;):&lt;STRING&gt;</b>: Reads environment variable value.
-- <b>env_set(key:&lt;STRING&gt;, val:&lt;STRING&gt;):&lt;BOOL&gt;</b>: Sets environment variable.
+- <b>get_pid() -&gt; Int32</b>: Returns process ID of the current running process.
+- <b>get_cwd() -&gt; String</b>: Returns current working directory path string.
+- <b>env_get(key: String) -&gt; String</b>: Reads environment variable value.
+- <b>env_set(key: String, val: String) -&gt; Bool</b>: Sets environment variable.
 
 <pre><code>vout("Current Working Directory:", get_cwd());
 vout("Process ID:", get_pid());
@@ -644,35 +644,35 @@ vout("Environment APP_MODE:", env_get("APP_MODE"));
 </code></pre>
 
 <p><b>3. Byte Buffers and Binary Endianness</b></p>
-- <b>buffer_new(size:&lt;USIZE&gt;):&lt;PTR&gt;</b>: Allocates a zero-initialized native byte buffer.
-- <b>buffer_free(buf:&lt;PTR&gt;):&lt;VOID&gt;</b>: Deallocates byte buffer.
-- <b>buffer_size(buf:&lt;PTR&gt;):&lt;USIZE&gt;</b>: Returns byte size of buffer.
-- <b>buffer_get_u8(buf:&lt;PTR&gt;, offset:&lt;USIZE&gt;):&lt;UINT8&gt;</b>: Reads byte with bounds checking.
-- <b>buffer_set_u8(buf:&lt;PTR&gt;, offset:&lt;USIZE&gt;, val:&lt;UINT8&gt;):&lt;VOID&gt;</b>: Writes byte with bounds checking.
-- <b>buffer_get_u32_le(buf:&lt;PTR&gt;, offset:&lt;USIZE&gt;):&lt;UINT32&gt;</b>: Reads 32-bit unsigned little-endian word.
-- <b>buffer_set_u32_le(buf:&lt;PTR&gt;, offset:&lt;USIZE&gt;, val:&lt;UINT32&gt;):&lt;VOID&gt;</b>: Writes 32-bit unsigned little-endian word.
+- <b>buffer_new(size: Usize) -&gt; Ptr</b>: Allocates a zero-initialized native byte buffer.
+- <b>buffer_free(buf: Ptr) -&gt; Void</b>: Deallocates byte buffer.
+- <b>buffer_size(buf: Ptr) -&gt; Usize</b>: Returns byte size of buffer.
+- <b>buffer_get_u8(buf: Ptr, offset: Usize) -&gt; Uint8</b>: Reads byte with bounds checking.
+- <b>buffer_set_u8(buf: Ptr, offset: Usize, val: Uint8) -&gt; Void</b>: Writes byte with bounds checking.
+- <b>buffer_get_u32_le(buf: Ptr, offset: Usize) -&gt; Uint32</b>: Reads 32-bit unsigned little-endian word.
+- <b>buffer_set_u32_le(buf: Ptr, offset: Usize, val: Uint32) -&gt; Void</b>: Writes 32-bit unsigned little-endian word.
 
-<pre><code>var buf:&lt;PTR&gt; = buffer_new(16);
+<pre><code>var buf: Ptr = buffer_new(16);
 buffer_set_u8(buf, 0, 0xDE);
 buffer_set_u8(buf, 1, 0xAD);
 buffer_set_u32_le(buf, 4, 1000000);
 
-var b0:&lt;UINT8&gt; = buffer_get_u8(buf, 0);
-var val32:&lt;UINT32&gt; = buffer_get_u32_le(buf, 4);
+var b0: Uint8 = buffer_get_u8(buf, 0);
+var val32: Uint32 = buffer_get_u32_le(buf, 4);
 vout("Byte 0:", b0, "Word at 4:", val32);
 
 buffer_free(buf);
 </code></pre>
 
 <p><b>4. Raw Pointer Arithmetic and Direct Memory Access</b></p>
-- <b>ptr_offset(base:&lt;PTR&gt;, byte_delta:&lt;ISIZE&gt;):&lt;PTR&gt;</b>: Performs native pointer arithmetic.
-- <b>ptr_read_u8(addr:&lt;PTR&gt;):&lt;UINT8&gt;</b>: Reads single byte from raw memory address.
-- <b>ptr_write_u8(addr:&lt;PTR&gt;, val:&lt;UINT8&gt;):&lt;VOID&gt;</b>: Writes single byte to raw memory address.
+- <b>ptr_offset(base: Ptr, byte_delta: Isize) -&gt; Ptr</b>: Performs native pointer arithmetic.
+- <b>ptr_read_u8(addr: Ptr) -&gt; Uint8</b>: Reads single byte from raw memory address.
+- <b>ptr_write_u8(addr: Ptr, val: Uint8) -&gt; Void</b>: Writes single byte to raw memory address.
 
 <pre><code>unsafe {
-    var raw_mem:&lt;PTR&gt; = buffer_new(8);
+    var raw_mem: Ptr = buffer_new(8);
     ptr_write_u8(raw_mem, 65); // ASCII 'A'
-    var second_byte:&lt;PTR&gt; = ptr_offset(raw_mem, 1);
+    var second_byte: Ptr = ptr_offset(raw_mem, 1);
     ptr_write_u8(second_byte, 66); // ASCII 'B'
 
     vout("Raw byte 0:", ptr_read_u8(raw_mem));
@@ -696,19 +696,19 @@ The <b>vout</b> built-in function accepts an arbitrary list of arguments, output
 <p>
 Prompts the user on standard output and reads a line from standard input as a string:
 </p>
-<pre><code>var user_input:&lt;STRING&gt; = input("Enter your username: ");
+<pre><code>var user_input: String = input("Enter your username: ");
 vout("Welcome,", user_input);
 </code></pre>
 
 <h3>Conversions and String Length</h3>
-- <b>to_int(s:&lt;STRING&gt;):&lt;INT64&gt;</b>: Converts textual decimal representation to 64-bit integer.
-- <b>to_float(s:&lt;STRING&gt;):&lt;FL64&gt;</b>: Converts text to 64-bit double-precision floating point.
-- <b>len(s:&lt;STRING&gt;):&lt;INT64&gt;</b>: Returns number of characters in string.
+- <b>to_int(s: String) -&gt; Int64</b>: Converts textual decimal representation to 64-bit integer.
+- <b>to_float(s: String) -&gt; Float64</b>: Converts text to 64-bit double-precision floating point.
+- <b>len(s: String) -&gt; Int64</b>: Returns number of characters in string.
 
-<pre><code>var num_str:&lt;STRING&gt; = "450";
-var parsed_int:&lt;INT64&gt; = to_int(num_str);
-var parsed_flt:&lt;FL64&gt; = to_float("99.95");
-var str_length:&lt;INT64&gt; = len(num_str);
+<pre><code>var num_str: String = "450";
+var parsed_int: Int64 = to_int(num_str);
+var parsed_flt: Float64 = to_float("99.95");
+var str_length: Int64 = len(num_str);
 
 vout("Parsed int:", parsed_int, "float:", parsed_flt, "length:", str_length);
 </code></pre>
@@ -781,34 +781,34 @@ The following program integrates object-oriented domain models, native binary bu
 <pre><code>// NextLang Systems Application Demonstration
 
 class DeviceTelemetry {
-    public var device_id:&lt;INT32&gt; = 0;
-    public var flags:&lt;UINT8&gt; = 0;
-    public var signal_strength:&lt;FL64&gt; = 0.0;
+    public var device_id: Int32 = 0;
+    public var flags: Uint8 = 0;
+    public var signal_strength: Float64 = 0.0;
 
-    public fn init(id:&lt;INT32&gt;, initial_flags:&lt;UINT8&gt;, signal:&lt;FL64&gt;):&lt;VOID&gt; {
+    public fn init(id: Int32, initial_flags: Uint8, signal: Float64) -&gt; Void {
         self.device_id = id;
         self.flags = initial_flags;
         self.signal_strength = signal;
         return;
     }
 
-    public fn enable_sensor(mask:&lt;UINT8&gt;):&lt;VOID&gt; {
+    public fn enable_sensor(mask: Uint8) -&gt; Void {
         self.flags = self.flags | mask;
         return;
     }
 
-    public fn is_sensor_active(mask:&lt;UINT8&gt;):&lt;BOOL&gt; {
-        return (self.flags & mask) != 0;
+    public fn is_sensor_active(mask: Uint8) -&gt; Bool {
+        return (self.flags &amp; mask) != 0;
     }
 
-    public fn serialize_packet():&lt;PTR&gt; {
-        var packet:&lt;PTR&gt; = buffer_new(16);
+    public fn serialize_packet() -&gt; Ptr {
+        var packet: Ptr = buffer_new(16);
         buffer_set_u32_le(packet, 0, self.device_id);
         buffer_set_u8(packet, 4, self.flags);
         return packet;
     }
 
-    public fn display():&lt;VOID&gt; {
+    public fn display() -&gt; Void {
         vout("Device ID:", self.device_id, "Flags:", self.flags, "Signal:", self.signal_strength);
         return;
     }
@@ -820,12 +820,12 @@ fn main() {
     vout("Working Directory:", get_cwd());
 
     // Instantiate telemetry model
-    var dev:&lt;DeviceTelemetry&gt; = DeviceTelemetry(9001, 0b00000001, 98.6);
+    var dev: DeviceTelemetry = DeviceTelemetry(9001, 0b00000001, 98.6);
     dev.display();
 
     // Enable sensors using bitwise flags
-    const GPS_FLAG:&lt;UINT8&gt; = 0b00000010;
-    const LIDAR_FLAG:&lt;UINT8&gt; = 0b00000100;
+    const GPS_FLAG: Uint8 = 0b00000010;
+    const LIDAR_FLAG: Uint8 = 0b00000100;
     dev.enable_sensor(GPS_FLAG);
     dev.enable_sensor(LIDAR_FLAG);
 
@@ -835,15 +835,15 @@ fn main() {
     vout("LIDAR Sensor Active:", dev.is_sensor_active(LIDAR_FLAG));
 
     // Serialize packet to native byte buffer
-    var raw_packet:&lt;PTR&gt; = dev.serialize_packet();
-    var read_id:&lt;UINT32&gt; = buffer_get_u32_le(raw_packet, 0);
-    var read_flags:&lt;UINT8&gt; = buffer_get_u8(raw_packet, 4);
+    var raw_packet: Ptr = dev.serialize_packet();
+    var read_id: Uint32 = buffer_get_u32_le(raw_packet, 0);
+    var read_flags: Uint8 = buffer_get_u8(raw_packet, 4);
 
     vout("Serialized binary packet verified - ID:", read_id, "Flags byte:", read_flags);
     buffer_free(raw_packet);
 
     // Persist event log
-    var log_file:&lt;STRING&gt; = "telemetry_run.log";
+    var log_file: String = "telemetry_run.log";
     file_write(log_file, "Telemetry packet serialized and verified successfully.");
     if file_exists(log_file) {
         vout("Log record confirmed on disk.");
@@ -885,9 +885,9 @@ import "utils.nx";
 
 <pre><code>import math;
 
-var root:&lt;FL64&gt; = sqrt(64.0);
-var power:&lt;FL64&gt; = pow(2.0, 8.0);
-var minimum:&lt;FL64&gt; = min(10.5, 4.2);
+var root: Float64 = sqrt(64.0);
+var power: Float64 = pow(2.0, 8.0);
+var minimum: Float64 = min(10.5, 4.2);
 </code></pre>
 
 <p>
@@ -896,9 +896,9 @@ var minimum:&lt;FL64&gt; = min(10.5, 4.2);
 
 <pre><code>import strings;
 
-var raw:&lt;STRING&gt; = "   NextLang Systems   ";
-var cleaned:&lt;STRING&gt; = trim(raw);
-var is_present:&lt;BOOL&gt; = contains(cleaned, "Systems");
+var raw: String = "   NextLang Systems   ";
+var cleaned: String = trim(raw);
+var is_present: Bool = contains(cleaned, "Systems");
 </code></pre>
 
 <p>
@@ -907,9 +907,9 @@ var is_present:&lt;BOOL&gt; = contains(cleaned, "Systems");
 
 <pre><code>import time;
 
-var t0:&lt;INT64&gt; = now_ms();
+var t0: Int64 = now_ms();
 sleep_ms(50);
-var t1:&lt;INT64&gt; = now_ms();
+var t1: Int64 = now_ms();
 vout("Elapsed milliseconds:", t1 - t0);
 </code></pre>
 
@@ -919,8 +919,8 @@ vout("Elapsed milliseconds:", t1 - t0);
 
 <pre><code>import encoding;
 
-var encoded:&lt;STRING&gt; = to_base64("NextLang");
-var decoded:&lt;STRING&gt; = from_base64(encoded);
+var encoded: String = to_base64("NextLang");
+var decoded: String = from_base64(encoded);
 vout("Base64:", encoded, "Restored:", decoded);
 </code></pre>
 
@@ -930,8 +930,8 @@ vout("Base64:", encoded, "Restored:", decoded);
 
 <pre><code>import json;
 
-var payload:&lt;STRING&gt; = "{\"name\": \"NextLang\", \"version\": 1}";
-var parsed:&lt;STRING&gt; = parse_json(payload);
+var payload: String = "{\"name\": \"NextLang\", \"version\": 1}";
+var parsed: String = parse_json(payload);
 vout("Parsed payload:", parsed);
 </code></pre>
 
@@ -941,10 +941,10 @@ vout("Parsed payload:", parsed);
 
 <pre><code>import fs;
 
-var path:&lt;STRING&gt; = "sample.txt";
+var path: String = "sample.txt";
 write_file(path, "NextLang filesystem test.");
 if exists(path) {
-    var content:&lt;STRING&gt; = read_file(path);
+    var content: String = read_file(path);
     vout("File content:", content);
     remove(path);
 }
@@ -1046,10 +1046,10 @@ NextLang provides built-in first-class asynchronous programming support designed
 
 <h3>Async Function Declaration</h3>
 <p>
-An asynchronous function is declared using the <b>async fn</b> keyword sequence. An async function returning type <b>T</b> has a runtime representation of <b>FUTURE&lt;T&gt;</b>.
+An asynchronous function is declared using the <b>async fn</b> keyword sequence. An async function returning type <b>T</b> has a runtime representation of <b>Future&lt;T&gt;</b>.
 </p>
 
-<pre><code>async fn fetch_user_id(username:&lt;STRING&gt;):&lt;INT64&gt; {
+<pre><code>async fn fetch_user_id(username: String) -&gt; Int64 {
     await sleep(20);
     return 1001;
 }
@@ -1060,9 +1060,9 @@ An asynchronous function is declared using the <b>async fn</b> keyword sequence.
 The <b>await</b> prefix expression pauses execution of the current asynchronous function until the future resolves, unwrapping the underlying value.
 </p>
 
-<pre><code>async fn main():&lt;VOID&gt; {
-    var fut:&lt;FUTURE&lt;INT64&gt;&gt; = fetch_user_id("alice");
-    var id:&lt;INT64&gt; = await fut;
+<pre><code>async fn main() -&gt; Void {
+    var fut: Future&lt;Int64&gt; = fetch_user_id("alice");
+    var id: Int64 = await fut;
     vout("User ID:", id);
 }
 </code></pre>
@@ -1082,17 +1082,17 @@ NextLang enforces strict static validation for asynchronous code:
 Tasks can be spawned concurrently and joined cooperatively using standard built-in functions:
 </p>
 
-<pre><code>async fn worker(id:&lt;INT32&gt;):&lt;STRING&gt; {
+<pre><code>async fn worker(id: Int32) -&gt; String {
     await sleep(50);
     return "Task completed";
 }
 
-async fn main():&lt;VOID&gt; {
-    var t1:&lt;FUTURE&lt;STRING&gt;&gt; = task_spawn(worker(1));
-    var t2:&lt;FUTURE&lt;STRING&gt;&gt; = task_spawn(worker(2));
+async fn main() -&gt; Void {
+    var t1: Future&lt;String&gt; = task_spawn(worker(1));
+    var t2: Future&lt;String&gt; = task_spawn(worker(2));
 
-    var r1:&lt;STRING&gt; = task_join(t1);
-    var r2:&lt;STRING&gt; = task_join(t2);
+    var r1: String = task_join(t1);
+    var r2: String = task_join(t2);
 
     vout(r1, r2);
 }
@@ -1103,17 +1103,17 @@ async fn main():&lt;VOID&gt; {
 NextLang provides genuinely non-blocking timers and operating system socket I/O:
 </p>
 
-<pre><code>async fn run_server():&lt;VOID&gt; {
-    var server:&lt;FUTURE&lt;INT64&gt;&gt; = tcp_listen("127.0.0.1:8080");
-    var server_fd:&lt;INT64&gt; = await server;
+<pre><code>async fn run_server() -&gt; Void {
+    var server: Future&lt;Int64&gt; = tcp_listen("127.0.0.1:8080");
+    var server_fd: Int64 = await server;
 
-    var client:&lt;FUTURE&lt;INT64&gt;&gt; = tcp_accept(server_fd);
-    var client_fd:&lt;INT64&gt; = await client;
+    var client: Future&lt;Int64&gt; = tcp_accept(server_fd);
+    var client_fd: Int64 = await client;
 
-    var read_fut:&lt;FUTURE&lt;STRING&gt;&gt; = tcp_read(client_fd, 1024);
-    var req:&lt;STRING&gt; = await read_fut;
+    var read_fut: Future&lt;String&gt; = tcp_read(client_fd, 1024);
+    var req: String = await read_fut;
 
-    var write_fut:&lt;FUTURE&lt;INT64&gt;&gt; = tcp_write(client_fd, "OK");
+    var write_fut: Future&lt;Int64&gt; = tcp_write(client_fd, "OK");
     await write_fut;
 
     tcp_close(client_fd);
