@@ -1,5 +1,12 @@
 use std::process::Command;
 
+#[allow(dead_code)]
+#[path = "../src/package.rs"]
+mod package;
+#[allow(dead_code)]
+#[path = "../src/reload.rs"]
+mod reload;
+
 fn nx_bin() -> Command {
     let mut path = std::env::current_exe().expect("failed to get test binary path");
     path.pop(); // remove binary name
@@ -619,3 +626,155 @@ fn test_cli_phase9_fmt_and_check() {
 
     let _ = std::fs::remove_file(temp_file);
 }
+
+#[test]
+fn test_cli_init_templates_and_validation() {
+    let temp_root = std::env::temp_dir().join(format!("nx_init_test_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&temp_root);
+    std::fs::create_dir_all(&temp_root).expect("create temp dir");
+
+    // 1. Invalid project name starting with '-'
+    let bad_name = nx_bin()
+        .current_dir(&temp_root)
+        .arg("init")
+        .arg("-invalid-name")
+        .output()
+        .expect("nx init -invalid-name");
+    assert!(!bad_name.status.success());
+    let stderr = String::from_utf8_lossy(&bad_name.stderr);
+    assert!(stderr.contains("cannot start with '-'"), "stderr: {}", stderr);
+
+    // 2. Invalid character in project name
+    let bad_char = nx_bin()
+        .current_dir(&temp_root)
+        .arg("init")
+        .arg("bad@name!")
+        .output()
+        .expect("nx init bad@name!");
+    assert!(!bad_char.status.success());
+
+    // 3. Init minimal template
+    let init_min = nx_bin()
+        .current_dir(&temp_root)
+        .arg("init")
+        .arg("my_min")
+        .arg("--template")
+        .arg("minimal")
+        .output()
+        .expect("nx init my_min");
+    assert!(init_min.status.success(), "stderr: {}", String::from_utf8_lossy(&init_min.stderr));
+    let min_dir = temp_root.join("my_min");
+    assert!(min_dir.join("nextlang.toml").exists());
+    assert!(min_dir.join(".env.example").exists());
+    assert!(min_dir.join(".gitignore").exists());
+    assert!(min_dir.join("README.md").exists());
+    assert!(min_dir.join("src/main.nx").exists());
+    assert!(min_dir.join("tests/main_test.nx").exists());
+
+    // Verify running the generated minimal project
+    let run_min = nx_bin()
+        .current_dir(&min_dir)
+        .arg("run")
+        .output()
+        .expect("nx run minimal");
+    assert!(run_min.status.success(), "stderr: {}", String::from_utf8_lossy(&run_min.stderr));
+    let stdout = String::from_utf8_lossy(&run_min.stdout);
+    assert!(stdout.contains("Hello from NextLang!"), "stdout: {}", stdout);
+
+    // 4. Duplicate init without --force fails
+    let dup_fail = nx_bin()
+        .current_dir(&temp_root)
+        .arg("init")
+        .arg("my_min")
+        .output()
+        .expect("nx init duplicate");
+    assert!(!dup_fail.status.success());
+    let dup_err = String::from_utf8_lossy(&dup_fail.stderr);
+    assert!(dup_err.contains("already exists"), "stderr: {}", dup_err);
+
+    // 5. Duplicate init with --force succeeds
+    let dup_force = nx_bin()
+        .current_dir(&temp_root)
+        .arg("init")
+        .arg("my_min")
+        .arg("--force")
+        .output()
+        .expect("nx init duplicate --force");
+    assert!(dup_force.status.success());
+
+    // 6. Init API template
+    let init_api = nx_bin()
+        .current_dir(&temp_root)
+        .arg("init")
+        .arg("my_api")
+        .arg("--template")
+        .arg("api")
+        .output()
+        .expect("nx init my_api");
+    assert!(init_api.status.success(), "stderr: {}", String::from_utf8_lossy(&init_api.stderr));
+    let api_dir = temp_root.join("my_api");
+    assert!(api_dir.join("nextlang.toml").exists());
+    let api_toml = std::fs::read_to_string(api_dir.join("nextlang.toml")).unwrap();
+    assert!(api_toml.contains("reload = true"));
+    assert!(api_toml.contains("nextapi"));
+    assert!(api_dir.join("src/main.nx").exists());
+    assert!(api_dir.join("tests/api_test.nx").exists());
+
+    // 7. Init Fullstack template
+    let init_full = nx_bin()
+        .current_dir(&temp_root)
+        .arg("init")
+        .arg("my_full")
+        .arg("--template")
+        .arg("fullstack")
+        .output()
+        .expect("nx init my_full");
+    assert!(init_full.status.success(), "stderr: {}", String::from_utf8_lossy(&init_full.stderr));
+    let full_dir = temp_root.join("my_full");
+    assert!(full_dir.join("frontend/README.md").exists());
+
+    let _ = std::fs::remove_dir_all(&temp_root);
+}
+
+#[test]
+fn test_reload_file_filter_and_manifest_run_meta() {
+    use std::path::Path;
+
+    // Test watch file filtering rules
+    assert!(reload::is_watched_file(Path::new("src/main.nx")));
+    assert!(reload::is_watched_file(Path::new("tests/api_test.nx")));
+    assert!(reload::is_watched_file(Path::new("nextlang.toml")));
+    assert!(!reload::is_watched_file(Path::new(".git/HEAD")));
+    assert!(!reload::is_watched_file(Path::new(".nextlang/cache.bin")));
+    assert!(!reload::is_watched_file(Path::new("target/debug/app")));
+    assert!(!reload::is_watched_file(Path::new("src/#main.nx#")));
+    assert!(!reload::is_watched_file(Path::new("src/main.nx~")));
+    assert!(!reload::is_watched_file(Path::new(".env")));
+    assert!(!reload::is_watched_file(Path::new("README.md")));
+
+    // Test manifest parsing with [project] and [run]
+    let toml_sample = r#"
+[project]
+name = "api-service"
+version = "2.0.0"
+entry = "src/server.nx"
+
+[run]
+host = "0.0.0.0"
+port = 9000
+reload = true
+
+[build]
+entry = "src/server.nx"
+target = "native"
+"#;
+    let manifest = package::Manifest::parse(toml_sample).expect("valid manifest");
+    assert_eq!(manifest.package.name, "api-service");
+    assert_eq!(manifest.package.version, "2.0.0");
+    assert_eq!(manifest.build.entry, "src/server.nx");
+    assert_eq!(manifest.run.host, "0.0.0.0");
+    assert_eq!(manifest.run.port, 9000);
+    assert!(manifest.run.reload);
+}
+
+

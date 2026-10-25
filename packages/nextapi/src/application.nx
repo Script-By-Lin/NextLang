@@ -266,7 +266,19 @@ class NextAPI {
     }
 
     public async fn run(host: String, port: Int32) -> Void {
-        var addr: String = host + ":" + int_to_str(port);
+        var eff_host: String = host;
+        var env_h: String = env_get("APP_HOST");
+        if str_len(env_h) > 0 {
+            eff_host = env_h;
+        }
+
+        var eff_port: Int32 = port;
+        var env_p: String = env_get("APP_PORT");
+        if str_len(env_p) > 0 {
+            eff_port = to_int(env_p);
+        }
+
+        var addr: String = eff_host + ":" + int_to_str(eff_port);
         var server_fd: Int64 = await tcp_listen(addr);
         if server_fd < 0 {
             vout("[NextAPI Error] Failed to bind server on " + addr);
@@ -275,10 +287,10 @@ class NextAPI {
 
         vout("+------------------------------------------------------------+");
         vout("|  NextAPI Server Running                                    |");
-        vout("|  Address: http://" + host + ":" + int_to_str(port) + "                        |");
-        vout("|  Interactive Docs: http://" + host + ":" + int_to_str(port) + self.docs_url + "                  |");
-        vout("|  ReDoc: http://" + host + ":" + int_to_str(port) + self.redoc_url + "                 |");
-        vout("|  OpenAPI JSON: http://" + host + ":" + int_to_str(port) + self.openapi_url + "          |");
+        vout("|  Address: http://" + eff_host + ":" + int_to_str(eff_port) + "                        |");
+        vout("|  Interactive Docs: http://" + eff_host + ":" + int_to_str(eff_port) + self.docs_url + "                  |");
+        vout("|  ReDoc: http://" + eff_host + ":" + int_to_str(eff_port) + self.redoc_url + "                 |");
+        vout("|  OpenAPI JSON: http://" + eff_host + ":" + int_to_str(eff_port) + self.openapi_url + "          |");
         vout("+------------------------------------------------------------+");
 
         self.lifecycle.trigger_startup();

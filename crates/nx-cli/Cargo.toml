@@ -19,4 +19,7 @@ nx-runtime = { path = "../nx-runtime" }
 nx-js-backend = { path = "../nx-js-backend" }
 nx-nir = { path = "../nx-nir" }
 nx-codegen = { path = "../nx-codegen" }
+notify = "6.1.1"
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
 

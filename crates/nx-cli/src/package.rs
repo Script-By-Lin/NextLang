@@ -123,9 +123,49 @@ pub struct BuildMeta {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunMeta {
+    pub host: String,
+    pub port: u16,
+    pub reload: bool,
+}
+
+impl Default for RunMeta {
+    fn default() -> Self {
+        Self {
+            host: "127.0.0.1".to_string(),
+            port: 8000,
+            reload: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProjectTemplate {
+    Minimal,
+    Api,
+    Fullstack,
+}
+
+impl std::str::FromStr for ProjectTemplate {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "minimal" => Ok(ProjectTemplate::Minimal),
+            "api" => Ok(ProjectTemplate::Api),
+            "fullstack" => Ok(ProjectTemplate::Fullstack),
+            other => Err(format!(
+                "unknown template '{}'. Available: minimal, api, fullstack",
+                other
+            )),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Manifest {
     pub package: PackageMeta,
     pub build: BuildMeta,
+    pub run: RunMeta,
     pub dependencies: BTreeMap<String, DependencySource>,
 }
 
@@ -142,6 +182,7 @@ impl Manifest {
                 entry: "src/main.nx".to_string(),
                 target: "native".to_string(),
             },
+            run: RunMeta::default(),
             dependencies: BTreeMap::new(),
         }
     }
@@ -153,6 +194,9 @@ impl Manifest {
         let mut description = String::new();
         let mut entry = "src/main.nx".to_string();
         let mut target = "native".to_string();
+        let mut run_host = "127.0.0.1".to_string();
+        let mut run_port = 8000u16;
+        let mut run_reload = false;
         let mut dependencies = BTreeMap::new();
 
         let mut current_section = "";
@@ -181,16 +225,23 @@ impl Manifest {
                 let val = val_raw.trim();
 
                 match current_section {
-                    "package" => match key {
+                    "package" | "project" => match key {
                         "name" => name = Some(parse_string_val(val)?),
                         "version" => version = Some(parse_string_val(val)?),
-                        "edition" => edition = parse_string_val(val)?,
+                        "edition" | "language_version" => edition = parse_string_val(val)?,
                         "description" => description = parse_string_val(val)?,
+                        "entry" => entry = parse_string_val(val)?,
                         _ => {}
                     },
                     "build" => match key {
                         "entry" => entry = parse_string_val(val)?,
                         "target" => target = parse_string_val(val)?,
+                        _ => {}
+                    },
+                    "run" => match key {
+                        "host" => run_host = parse_string_val(val)?,
+                        "port" => run_port = parse_u16_val(val)?,
+                        "reload" => run_reload = parse_bool_val(val)?,
                         _ => {}
                     },
                     "dependencies" => {
@@ -250,9 +301,9 @@ impl Manifest {
         }
 
         let name = name
-            .ok_or_else(|| "missing required field `package.name` in nextlang.toml".to_string())?;
+            .ok_or_else(|| "missing required field `project.name` or `package.name` in nextlang.toml".to_string())?;
         let version = version.ok_or_else(|| {
-            "missing required field `package.version` in nextlang.toml".to_string()
+            "missing required field `project.version` or `package.version` in nextlang.toml".to_string()
         })?;
 
         Ok(Manifest {
@@ -263,19 +314,31 @@ impl Manifest {
                 description,
             },
             build: BuildMeta { entry, target },
+            run: RunMeta {
+                host: run_host,
+                port: run_port,
+                reload: run_reload,
+            },
             dependencies,
         })
     }
 
     pub fn to_toml_string(&self) -> String {
         let mut out = String::new();
-        out.push_str("[package]\n");
+        out.push_str("[project]\n");
         out.push_str(&format!("name = \"{}\"\n", self.package.name));
         out.push_str(&format!("version = \"{}\"\n", self.package.version));
-        out.push_str(&format!("edition = \"{}\"\n", self.package.edition));
+        out.push_str(&format!("entry = \"{}\"\n", self.build.entry));
+        out.push_str(&format!("language_version = \"{}\"\n", self.package.edition));
         if !self.package.description.is_empty() {
             out.push_str(&format!("description = \"{}\"\n", self.package.description));
         }
+        out.push('\n');
+
+        out.push_str("[run]\n");
+        out.push_str(&format!("host = \"{}\"\n", self.run.host));
+        out.push_str(&format!("port = {}\n", self.run.port));
+        out.push_str(&format!("reload = {}\n", self.run.reload));
         out.push('\n');
 
         out.push_str("[build]\n");
@@ -324,6 +387,32 @@ fn parse_string_val(s: &str) -> Result<String, String> {
     } else {
         Err(format!("invalid string literal: {}", s))
     }
+}
+
+fn parse_bool_val(s: &str) -> Result<bool, String> {
+    let trimmed = s.trim();
+    let b_str = if trimmed.starts_with('"') && trimmed.ends_with('"') && trimmed.len() >= 2 {
+        &trimmed[1..trimmed.len() - 1]
+    } else {
+        trimmed
+    };
+    match b_str {
+        "true" => Ok(true),
+        "false" => Ok(false),
+        other => Err(format!("expected boolean (true/false), found '{}'", other)),
+    }
+}
+
+fn parse_u16_val(s: &str) -> Result<u16, String> {
+    let trimmed = s.trim();
+    let num_str = if trimmed.starts_with('"') && trimmed.ends_with('"') && trimmed.len() >= 2 {
+        &trimmed[1..trimmed.len() - 1]
+    } else {
+        trimmed
+    };
+    num_str
+        .parse::<u16>()
+        .map_err(|e| format!("invalid port number '{}': {}", s, e))
 }
 
 fn parse_dependency_val(val: &str) -> Result<DependencySource, String> {
@@ -628,50 +717,125 @@ pub fn find_project_root(start_dir: &Path) -> Option<PathBuf> {
     None
 }
 
-/// Implements `nx init`: creates project files in `dir`.
-pub fn init_project(dir: &Path) -> Result<(), String> {
-    let manifest_path = dir.join("nextlang.toml");
-    if manifest_path.exists() {
+/// Validates project name: must be non-empty, alphanumeric with '_' or '-', cannot start with '-' or '.'.
+pub fn validate_project_name(name: &str) -> Result<(), String> {
+    if name.is_empty() {
+        return Err("error: project name cannot be empty".to_string());
+    }
+    if name.starts_with('-') || name.starts_with('.') {
         return Err(format!(
-            "error: `nextlang.toml` already exists in '{}'",
-            dir.display()
+            "error: project name '{}' cannot start with '-' or '.'",
+            name
+        ));
+    }
+    for c in name.chars() {
+        if !c.is_alphanumeric() && c != '-' && c != '_' {
+            return Err(format!(
+                "error: project name '{}' contains invalid character '{}'. Only alphanumeric, '-' and '_' are allowed",
+                name, c
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Implements `nx init`: creates project files in `dir` with specified template.
+pub fn init_project(
+    base_dir: &Path,
+    project_name_opt: Option<&str>,
+    template: ProjectTemplate,
+    force: bool,
+) -> Result<(), String> {
+    let (target_dir, pkg_name) = match project_name_opt {
+        Some(name) => {
+            validate_project_name(name)?;
+            (base_dir.join(name), name.to_string())
+        }
+        None => {
+            let derived = base_dir
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("my_project")
+                .replace([' ', '-'], "_");
+            (base_dir.to_path_buf(), derived)
+        }
+    };
+
+    if !target_dir.exists() {
+        fs::create_dir_all(&target_dir)
+            .map_err(|e| format!("failed to create directory '{}': {}", target_dir.display(), e))?;
+    }
+
+    let manifest_path = target_dir.join("nextlang.toml");
+    if manifest_path.exists() && !force {
+        return Err(format!(
+            "error: `nextlang.toml` already exists in '{}'. Use --force to overwrite.",
+            target_dir.display()
         ));
     }
 
-    let pkg_name = dir
-        .file_name()
-        .and_then(|s| s.to_str())
-        .unwrap_or("my_project")
-        .replace([' ', '-'], "_");
+    let mut manifest = Manifest::new(&pkg_name);
+    if template == ProjectTemplate::Api || template == ProjectTemplate::Fullstack {
+        manifest.run.reload = true;
+        manifest.dependencies.insert(
+            "nextapi".to_string(),
+            DependencySource::Version("*".to_string()),
+        );
+    }
 
-    let manifest = Manifest::new(&pkg_name);
     fs::write(&manifest_path, manifest.to_toml_string())
         .map_err(|e| format!("failed to write nextlang.toml: {}", e))?;
 
-    let src_dir = dir.join("src");
+    let src_dir = target_dir.join("src");
     fs::create_dir_all(&src_dir).map_err(|e| format!("failed to create src/: {}", e))?;
 
     let main_nx = src_dir.join("main.nx");
-    if !main_nx.exists() {
-        let code = r#"import math;
+    if !main_nx.exists() || force {
+        let code = match template {
+            ProjectTemplate::Minimal => r#"import math;
 import strings;
 
-fn main():<VOID> {
+fn main() -> Void {
     vout("Hello from NextLang!");
-    var root:<FL64> = sqrt(16.0);
+    var root: Float64 = sqrt(16.0);
     vout("sqrt(16.0) = ", root);
+    return;
 }
+
 main();
-"#;
+"#.to_string(),
+            ProjectTemplate::Api | ProjectTemplate::Fullstack => format!(
+                r#"import nextapi;
+
+async fn main() -> Void {{
+    var app: NextAPI = NextAPI("{}", "0.1.0", "NextAPI Application");
+
+    app.get("/", "Root Welcome", "Welcome endpoint", "default");
+    app.set_response("GET", "/", 200, "{{\"message\":\"Hello from NextLang NextAPI!\"}}");
+
+    app.get("/health", "Health Status", "Health check endpoint", "system");
+    app.set_response("GET", "/health", 200, "{{\"status\":\"healthy\"}}");
+
+    await app.run("127.0.0.1", 8000);
+    return;
+}}
+
+main();
+"#,
+                pkg_name
+            ),
+        };
         fs::write(&main_nx, code).map_err(|e| format!("failed to write src/main.nx: {}", e))?;
     }
 
-    let tests_dir = dir.join("tests");
+    let tests_dir = target_dir.join("tests");
     fs::create_dir_all(&tests_dir).map_err(|e| format!("failed to create tests/: {}", e))?;
 
-    let test_nx = tests_dir.join("main_test.nx");
-    if !test_nx.exists() {
-        let test_code = r#"import testing;
+    match template {
+        ProjectTemplate::Minimal => {
+            let test_nx = tests_dir.join("main_test.nx");
+            if !test_nx.exists() || force {
+                let test_code = r#"import testing;
 import math;
 
 test "basic math assertion" {
@@ -679,53 +843,99 @@ test "basic math assertion" {
     assert(abs(-5.0) == 5.0, "math abs works");
 }
 "#;
-        fs::write(&test_nx, test_code)
-            .map_err(|e| format!("failed to write tests/main_test.nx: {}", e))?;
+                fs::write(&test_nx, test_code)
+                    .map_err(|e| format!("failed to write tests/main_test.nx: {}", e))?;
+            }
+        }
+        ProjectTemplate::Api | ProjectTemplate::Fullstack => {
+            let test_nx = tests_dir.join("api_test.nx");
+            if !test_nx.exists() || force {
+                let test_code = r#"import testing;
+import nextapi;
+
+test "health check returns 200" {
+    var app: NextAPI = NextAPI("Test App", "0.1.0", "API Test");
+    app.get("/health", "Health", "Service health check", "system");
+    app.set_response("GET", "/health", 200, "{\"status\":\"healthy\"}");
+
+    var client: TestClient = TestClient(app);
+    var res: Response = client.get("/health");
+    assert(res.status == 200, "Health check should return 200 OK");
+    assert(str_contains(res.body, "healthy"), "Must contain healthy status");
+}
+"#;
+                fs::write(&test_nx, test_code)
+                    .map_err(|e| format!("failed to write tests/api_test.nx: {}", e))?;
+            }
+        }
     }
 
-    let gitignore = dir.join(".gitignore");
-    if !gitignore.exists() {
-        let gitignore_content = "target/\ndist/\n.nx_cache/\n";
+    if template == ProjectTemplate::Fullstack {
+        let frontend_dir = target_dir.join("frontend");
+        let _ = fs::create_dir_all(&frontend_dir);
+        let fe_readme = frontend_dir.join("README.md");
+        if !fe_readme.exists() || force {
+            let _ = fs::write(
+                fe_readme,
+                "# Frontend Application\n\nFrontend directory prepared for future fullstack integration.\n",
+            );
+        }
+    }
+
+    let gitignore = target_dir.join(".gitignore");
+    if !gitignore.exists() || force {
+        let gitignore_content = "target/\ndist/\n.nx_cache/\n.nextlang/\n.env\n.env.local\n*.log\n";
         let _ = fs::write(gitignore, gitignore_content);
     }
 
-    let lockfile = resolve_lockfile(dir, &manifest)?;
-    let lock_path = dir.join("nextlang.lock");
+    let env_example = target_dir.join(".env.example");
+    if !env_example.exists() || force {
+        let env_content = match template {
+            ProjectTemplate::Minimal => "APP_HOST=127.0.0.1\nAPP_PORT=8000\n",
+            ProjectTemplate::Api | ProjectTemplate::Fullstack => {
+                "APP_HOST=127.0.0.1\nAPP_PORT=8000\nDATABASE_URL=postgresql://user:password@localhost:5432/mydb\n"
+            }
+        };
+        let _ = fs::write(env_example, env_content);
+    }
+
+    let readme = target_dir.join("README.md");
+    if !readme.exists() || force {
+        let readme_content = match template {
+            ProjectTemplate::Minimal => format!(
+                "# {}\n\nA minimal NextLang application.\n\n## Running\n\n```bash\nnx run\n```\n\n## Testing\n\n```bash\nnx test\n```\n",
+                pkg_name
+            ),
+            ProjectTemplate::Api => format!(
+                "# {}\n\nA NextAPI REST API built with NextLang.\n\n## Development with Auto-Reload\n\n```bash\nnx run --reload\n# or\nnx api dev --reload\n```\n\n## Interactive Documentation\n- Swagger UI: http://127.0.0.1:8000/docs\n- ReDoc: http://127.0.0.1:8000/redoc\n- OpenAPI JSON: http://127.0.0.1:8000/openapi.json\n\n## Testing\n\n```bash\nnx test\n```\n",
+                pkg_name
+            ),
+            ProjectTemplate::Fullstack => format!(
+                "# {}\n\nA NextLang fullstack application (NextAPI backend + frontend placeholder).\n\n## Running API with Auto-Reload\n\n```bash\nnx run --reload\n# or\nnx api dev --reload\n```\n\n## Testing\n\n```bash\nnx test\n```\n",
+                pkg_name
+            ),
+        };
+        let _ = fs::write(readme, readme_content);
+    }
+
+    let lockfile = resolve_lockfile(&target_dir, &manifest)?;
+    let lock_path = target_dir.join("nextlang.lock");
     fs::write(&lock_path, lockfile.to_toml_string())
         .map_err(|e| format!("failed to write nextlang.lock: {}", e))?;
 
     println!(
-        "Initialized NextLang package '{}' in {}",
+        "Initialized NextLang project '{}' (template: {:?}) in {}",
         pkg_name,
-        dir.display()
+        template,
+        target_dir.display()
     );
     Ok(())
 }
 
 /// Implements `nx new <name>`: creates a directory and initializes files.
 pub fn new_project(name: &str) -> Result<(), String> {
-    let target_dir = Path::new(name);
-    if target_dir.exists() {
-        if target_dir.is_dir() {
-            let entries = fs::read_dir(target_dir).map_err(|e| format!("{}", e))?;
-            if entries.count() > 0 {
-                return Err(format!(
-                    "error: directory '{}' already exists and is not empty",
-                    name
-                ));
-            }
-        } else {
-            return Err(format!(
-                "error: '{}' already exists and is not a directory",
-                name
-            ));
-        }
-    } else {
-        fs::create_dir_all(target_dir)
-            .map_err(|e| format!("failed to create directory '{}': {}", name, e))?;
-    }
-
-    init_project(target_dir)
+    let cur = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    init_project(&cur, Some(name), ProjectTemplate::Minimal, false)
 }
 
 /// Implements `nx add <pkg> [--path <p>] [--git <g>] [--version <v>]`.

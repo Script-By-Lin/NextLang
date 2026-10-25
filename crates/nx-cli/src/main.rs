@@ -1,4 +1,5 @@
 mod package;
+mod reload;
 
 use nx_ast::AstFormatter;
 use nx_codegen::{compile_source_with_modules_to_executable, CodegenConfig};
@@ -22,7 +23,7 @@ Usage:
     nx <command> [options] [arguments]
 
 Project & Package Commands:
-    init [dir]               Initialize a new NextLang package in current or specified directory
+    init [name] [opts]       Initialize a new NextLang project (--template minimal|api|fullstack, --force)
     new <name>               Create a new NextLang package directory with template
     add <pkg> [opts]         Add a dependency (options: --path <dir>, --git <url>, --version <ver>)
     remove <pkg>             Remove a dependency from manifest and lockfile
@@ -34,13 +35,13 @@ Developer Ecosystem:
     test [path] [--filter f] Discover and execute NextLang unit tests
 
 Build & Execution:
-    run [file.nx] [--time]   Execute source file or project entry point via NextLang runtime
+    run [file.nx] [opts]     Execute project or source file via NextLang runtime (--reload, --host <h>, --port <p>, --time)
     build [file.nx] [opts]   Compile source or project to a native executable or JS
                              Opts: -o <out>, --target <native|js>, --opt-level <0|1|2|3>, --dump-nir, --emit-llvm, --time
     run-native <file|binary> Compile and run source natively or execute native binary
     check [file.nx]          Validate source file or project for errors
     compile-js [file.nx]     Compile source file to executable JavaScript (-o <out.js>, --target node|browser)
-    api dev [entry] [opts]   Start NextAPI development server (--host <h>, --port <p>)
+    api dev [entry] [opts]   Start NextAPI server (--reload, --host <h>, --port <p>)
 
 Inspection & Debugging:
     dump-nir <file.nx>       Dump NextLang typed Intermediate Representation (NIR)
@@ -51,8 +52,9 @@ Inspection & Debugging:
     --help, -h               Print this help message
 
 Examples:
-    nx new my-project
-    cd my-project && nx run
+    nx init my-api --template api
+    cd my-api && nx run --reload
+    nx api dev --reload
     nx test
     nx fmt --check
     nx build --target native -o my-app
@@ -111,14 +113,15 @@ fn resolve_entry_path(specified_path: Option<&str>) -> Result<PathBuf, String> {
     Err("error: no source file specified and no `nextlang.toml` found in current or parent directories".to_string())
 }
 
-fn cmd_init(dir_arg: Option<&str>) -> Result<(), ()> {
-    let target = match dir_arg {
-        Some(d) => PathBuf::from(d),
-        None => env::current_dir().map_err(|e| {
-            eprintln!("error: failed to get current directory: {}", e);
-        })?,
-    };
-    package::init_project(&target).map_err(|e| {
+fn cmd_init(
+    project_name: Option<&str>,
+    template: package::ProjectTemplate,
+    force: bool,
+) -> Result<(), ()> {
+    let cur = env::current_dir().map_err(|e| {
+        eprintln!("error: failed to get current directory: {}", e);
+    })?;
+    package::init_project(&cur, project_name, template, force).map_err(|e| {
         eprintln!("{}", e);
     })
 }
@@ -536,6 +539,7 @@ fn cmd_api_dev(
     entry_path: Option<&str>,
     host_opt: Option<&str>,
     port_opt: Option<&str>,
+    reload: bool,
 ) -> Result<(), ()> {
     let path = match resolve_entry_path(entry_path) {
         Ok(p) => p,
@@ -545,8 +549,31 @@ fn cmd_api_dev(
         }
     };
 
-    let host = host_opt.unwrap_or("127.0.0.1");
-    let port = port_opt.unwrap_or("8000");
+    let cur_dir = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let proj_root = package::find_project_root(&cur_dir)
+        .or_else(|| path.parent().map(|p| p.to_path_buf()))
+        .unwrap_or(cur_dir);
+
+    let manifest_path = proj_root.join("nextlang.toml");
+    let manifest_run = if let Ok(content) = fs::read_to_string(&manifest_path) {
+        package::Manifest::parse(&content).map(|m| m.run).ok()
+    } else {
+        None
+    };
+
+    let host = host_opt
+        .or_else(|| manifest_run.as_ref().map(|r| r.host.as_str()))
+        .unwrap_or("127.0.0.1");
+    let default_port_str = manifest_run
+        .as_ref()
+        .map(|r| r.port.to_string())
+        .unwrap_or_else(|| "8000".to_string());
+    let port = port_opt.unwrap_or(&default_port_str);
+    let should_reload = reload || manifest_run.as_ref().map(|r| r.reload).unwrap_or(false);
+
+    if should_reload {
+        return reload::run_with_reload(&proj_root, &path, Some(host), Some(port));
+    }
 
     println!("============================================================");
     println!("  NextAPI Development Server (nx api dev)");
@@ -560,6 +587,8 @@ fn cmd_api_dev(
     );
     println!("============================================================");
 
+    std::env::set_var("APP_HOST", host);
+    std::env::set_var("APP_PORT", port);
     cmd_run(&path, false)
 }
 
@@ -843,8 +872,33 @@ fn main() {
             print_help();
         }
         "init" => {
-            let dir_arg = args.get(2).map(|s| s.as_str());
-            if cmd_init(dir_arg).is_err() {
+            let mut project_name = None;
+            let mut template = package::ProjectTemplate::Minimal;
+            let mut force = false;
+
+            let mut iter = args[2..].iter().peekable();
+            while let Some(arg) = iter.next() {
+                if arg == "--template" {
+                    if let Some(t) = iter.next() {
+                        template = match t.parse::<package::ProjectTemplate>() {
+                            Ok(tmpl) => tmpl,
+                            Err(err) => {
+                                eprintln!("error: {}", err);
+                                process::exit(1);
+                            }
+                        };
+                    } else {
+                        eprintln!("error: '--template' requires an argument (minimal, api, fullstack)");
+                        process::exit(1);
+                    }
+                } else if arg == "--force" {
+                    force = true;
+                } else if !arg.starts_with("--") && project_name.is_none() {
+                    project_name = Some(arg.as_str());
+                }
+            }
+
+            if cmd_init(project_name, template, force).is_err() {
                 process::exit(1);
             }
         }
@@ -937,10 +991,20 @@ fn main() {
         "run" => {
             let mut file_path = None;
             let mut time_flag = false;
+            let mut reload_flag = false;
+            let mut host_opt = None;
+            let mut port_opt = None;
 
-            for arg in &args[2..] {
+            let mut iter = args[2..].iter().peekable();
+            while let Some(arg) = iter.next() {
                 if arg == "--time" {
                     time_flag = true;
+                } else if arg == "--reload" {
+                    reload_flag = true;
+                } else if arg == "--host" {
+                    host_opt = iter.next().map(|s| s.as_str());
+                } else if arg == "--port" {
+                    port_opt = iter.next().map(|s| s.as_str());
                 } else if !arg.starts_with("--") && file_path.is_none() {
                     file_path = Some(arg.as_str());
                 }
@@ -954,37 +1018,73 @@ fn main() {
                 }
             };
 
-            if cmd_run(&path, time_flag).is_err() {
-                process::exit(1);
+            let cur_dir = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+            let proj_root = package::find_project_root(&cur_dir)
+                .or_else(|| path.parent().map(|p| p.to_path_buf()))
+                .unwrap_or(cur_dir);
+
+            let manifest_path = proj_root.join("nextlang.toml");
+            let manifest_run = if let Ok(content) = fs::read_to_string(&manifest_path) {
+                package::Manifest::parse(&content).map(|m| m.run).ok()
+            } else {
+                None
+            };
+
+            let should_reload = reload_flag || manifest_run.as_ref().map(|r| r.reload).unwrap_or(false);
+
+            if let Some(h) = host_opt {
+                std::env::set_var("APP_HOST", h);
+            }
+            if let Some(p) = port_opt {
+                std::env::set_var("APP_PORT", p);
+            }
+
+            if should_reload {
+                if reload::run_with_reload(&proj_root, &path, host_opt, port_opt).is_err() {
+                    process::exit(1);
+                }
+            } else {
+                if cmd_run(&path, time_flag).is_err() {
+                    process::exit(1);
+                }
             }
         }
         "api" => {
             let subcommand = args.get(2).map(|s| s.as_str());
-            match subcommand {
-                Some("dev") => {
-                    let mut entry = None;
-                    let mut host = None;
-                    let mut port = None;
+            let (is_dev, arg_offset) = match subcommand {
+                Some("dev") => (true, 3),
+                Some(other) if other.starts_with("--") || other.ends_with(".nx") => (true, 2),
+                None => (true, 2),
+                _ => (false, 2),
+            };
 
-                    let mut iter = args[3..].iter().peekable();
-                    while let Some(arg) = iter.next() {
-                        if arg == "--host" {
-                            host = iter.next().map(|s| s.as_str());
-                        } else if arg == "--port" {
-                            port = iter.next().map(|s| s.as_str());
-                        } else if !arg.starts_with("--") && entry.is_none() {
-                            entry = Some(arg.as_str());
-                        }
-                    }
+            if is_dev {
+                let mut entry = None;
+                let mut host = None;
+                let mut port = None;
+                let mut reload = false;
 
-                    if cmd_api_dev(entry, host, port).is_err() {
-                        process::exit(1);
+                let mut iter = args[arg_offset..].iter().peekable();
+                while let Some(arg) = iter.next() {
+                    if arg == "--host" {
+                        host = iter.next().map(|s| s.as_str());
+                    } else if arg == "--port" {
+                        port = iter.next().map(|s| s.as_str());
+                    } else if arg == "--reload" {
+                        reload = true;
+                    } else if !arg.starts_with("--") && entry.is_none() {
+                        entry = Some(arg.as_str());
                     }
                 }
-                _ => {
-                    eprintln!("error: 'api' requires a subcommand, e.g. 'nx api dev'\n\nUsage:\n    nx api dev [entry.nx] [--host <host>] [--port <port>]");
+
+                if cmd_api_dev(entry, host, port, reload).is_err() {
                     process::exit(1);
                 }
+            } else {
+                eprintln!(
+                    "error: 'api' requires a subcommand, e.g. 'nx api dev'\n\nUsage:\n    nx api dev [entry.nx] [--host <host>] [--port <port>] [--reload]"
+                );
+                process::exit(1);
             }
         }
         "compile-js" => {
