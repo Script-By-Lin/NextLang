@@ -215,3 +215,22 @@ var x:<INT32> = "invalid string type assignment";
         "expected semantic error to reject compilation"
     );
 }
+
+#[test]
+fn test_compile_phase10_async_await() {
+    let src = r#"
+async fn fetch_msg():<STRING> {
+    await sleep(5);
+    return "Async JS Hello";
+}
+
+async fn main():<VOID> {
+    var msg:<STRING> = await fetch_msg();
+    vout("Message:", msg);
+}
+"#;
+    let js = compile_to_js(src).expect("compilation failed");
+    let (stdout, stderr, success) = run_node(&js, None);
+    assert!(success, "node error: {}", stderr);
+    assert!(stdout.contains("Message: Async JS Hello"));
+}

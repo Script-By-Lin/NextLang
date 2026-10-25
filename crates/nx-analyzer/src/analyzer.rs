@@ -43,6 +43,7 @@ pub struct SemanticAnalyzer<'a> {
     ownership_scope_vars: Vec<Vec<String>>,
     pub in_unsafe: bool,
     pub struct_defs: HashMap<String, Vec<(String, SemType)>>,
+    pub current_is_async: bool,
 }
 
 impl<'a> SemanticAnalyzer<'a> {
@@ -57,7 +58,19 @@ impl<'a> SemanticAnalyzer<'a> {
             ownership_scope_vars: vec![Vec::new()],
             in_unsafe: false,
             struct_defs: HashMap::new(),
+            current_is_async: false,
         }
+    }
+
+    pub fn has_active_mutable_borrows(&self) -> bool {
+        for stack in self.ownership_vars.values() {
+            if let Some(var) = stack.last() {
+                if var.has_mutable_borrow {
+                    return true;
+                }
+            }
+        }
+        false
     }
 
     fn is_assignable(&self, src: &SemType, target: &SemType) -> bool {
@@ -397,6 +410,7 @@ impl<'a> SemanticAnalyzer<'a> {
                             is_static: m.is_static,
                             is_abstract: m.is_abstract,
                             is_final: m.is_final,
+                            is_async: m.is_async || m.function.is_async,
                             span: m.span,
                         },
                     );
@@ -860,9 +874,12 @@ impl<'a> SemanticAnalyzer<'a> {
                     }
 
                     // Check statements
+                    let prev_async = self.current_is_async;
+                    self.current_is_async = m.is_async || m.function.is_async;
                     for s in &m.function.body.statements {
                         self.analyze_stmt(s);
                     }
+                    self.current_is_async = prev_async;
 
                     // Non-void methods must definitely return
                     if return_type != SemType::Void && !block_definitely_returns(&m.function.body) {
@@ -916,6 +933,7 @@ impl<'a> SemanticAnalyzer<'a> {
             kind: SymbolKind::Function {
                 param_types,
                 return_type,
+                is_async: f.is_async,
             },
             span: f.name.span,
             scope_level: 0,
@@ -1421,9 +1439,12 @@ impl<'a> SemanticAnalyzer<'a> {
             return_type: return_type.clone(),
         });
 
+        let prev_async = self.current_is_async;
+        self.current_is_async = f.is_async;
         for s in &f.body.statements {
             self.analyze_stmt(s);
         }
+        self.current_is_async = prev_async;
 
         // Return path validation
         if return_type != SemType::Void && !block_definitely_returns(&f.body) {
@@ -2249,6 +2270,41 @@ impl<'a> SemanticAnalyzer<'a> {
                     SemType::Unknown
                 }
             }
+            Expr::Await { expr, span } => {
+                if !self.current_is_async {
+                    self.diagnostics.error_code_with_help(
+                        "NX-ASYNC-001",
+                        *span,
+                        "await is only permitted inside async functions",
+                        "mark the enclosing function with 'async fn'",
+                    );
+                }
+
+                if self.has_active_mutable_borrows() {
+                    self.diagnostics.error_code_with_help(
+                        "NX-OWN-004",
+                        *span,
+                        "cannot yield or await across an active mutable reference",
+                        "release the mutable borrow before calling await",
+                    );
+                }
+
+                let expr_t = self.check_expr(expr, None);
+                match expr_t {
+                    SemType::Future(inner) => *inner,
+                    SemType::Any => SemType::Any,
+                    SemType::Unknown => SemType::Unknown,
+                    other => {
+                        self.diagnostics.error_code_with_help(
+                            "NX-TYPE-001",
+                            *span,
+                            format!("cannot await non-future type '{}'", other),
+                            "await expression requires a FUTURE<T> or async function return",
+                        );
+                        SemType::Unknown
+                    }
+                }
+            }
         }
     }
 
@@ -2738,7 +2794,11 @@ impl<'a> SemanticAnalyzer<'a> {
                             }
                         }
 
-                        return method.return_type;
+                        return if method.is_async {
+                            SemType::Future(Box::new(method.return_type))
+                        } else {
+                            method.return_type
+                        };
                     } else {
                         self.diagnostics.error_code_with_help(
                             "NX-OOP-012",
@@ -2846,7 +2906,11 @@ impl<'a> SemanticAnalyzer<'a> {
                         }
                     }
 
-                    return method.return_type;
+                    return if method.is_async {
+                        SemType::Future(Box::new(method.return_type))
+                    } else {
+                        method.return_type
+                    };
                 } else if let Some(iface) =
                     self.class_hierarchy.lookup_interface(class_name).cloned()
                 {
@@ -2951,6 +3015,7 @@ impl<'a> SemanticAnalyzer<'a> {
                         SymbolKind::Function {
                             param_types,
                             return_type,
+                            is_async,
                         },
                     ..
                 }) => {
@@ -2999,7 +3064,11 @@ impl<'a> SemanticAnalyzer<'a> {
                         }
                     }
 
-                    return ret_t;
+                    return if is_async {
+                        SemType::Future(Box::new(ret_t))
+                    } else {
+                        ret_t
+                    };
                 }
                 Some(Symbol {
                     kind:

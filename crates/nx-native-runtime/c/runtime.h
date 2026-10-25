@@ -139,6 +139,35 @@ void nx_rt_assert_eq(const char *actual, const char *expected, const char *msg);
 void assert(int8_t cond, const char *msg);
 void assert_eq(const char *actual, const char *expected, const char *msg);
 
+// Phase 10: Asynchronous Runtime & Network I/O
+void nx_rt_async_sleep(int64_t ms);
+int64_t nx_rt_tcp_listen(const char *host, int32_t port);
+int64_t nx_rt_tcp_accept(int64_t server_fd);
+int64_t nx_rt_tcp_connect(const char *host, int32_t port);
+int64_t nx_rt_tcp_read(int64_t fd, char *buf, int64_t max_len);
+const char* nx_rt_tcp_read_str(int64_t fd, int64_t max_len);
+int64_t nx_rt_tcp_write(int64_t fd, const char *data, int64_t len);
+int64_t nx_rt_tcp_write_str(int64_t fd, const char *data);
+void nx_rt_tcp_close(int64_t fd);
+
+void* nx_rt_task_spawn(void* (*fn)(void*), void *arg);
+void* nx_rt_task_join(void *task);
+int8_t nx_rt_task_cancel(void *task);
+
+// Standard aliases
+void async_sleep(int64_t ms);
+int64_t tcp_listen(const char *host, int32_t port);
+int64_t tcp_accept(int64_t server_fd);
+int64_t tcp_connect(const char *host, int32_t port);
+int64_t tcp_read(int64_t fd, char *buf, int64_t max_len);
+const char* tcp_read_str(int64_t fd, int64_t max_len);
+int64_t tcp_write(int64_t fd, const char *data, int64_t len);
+int64_t tcp_write_str(int64_t fd, const char *data);
+void tcp_close(int64_t fd);
+void* task_spawn(void* (*fn)(void*), void *arg);
+void* task_join(void *task);
+int8_t task_cancel(void *task);
+
 #ifdef __cplusplus
 }
 #endif

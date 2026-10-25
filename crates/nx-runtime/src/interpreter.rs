@@ -1,17 +1,51 @@
 use crate::environment::Environment;
 use crate::error::RuntimeError;
 use crate::heap::HeapManager;
-use crate::value::{ObjectInstance, Value};
+use crate::value::{FutureState, ObjectInstance, TaskHandle, Value};
 use nx_ast::*;
 use nx_diagnostics::Span;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::Write;
+use std::net::{TcpListener, TcpStream};
 use std::rc::Rc;
+use std::time::Instant;
 
 pub enum ControlFlow {
     None,
     Return(Value),
+}
+
+#[derive(Debug)]
+pub enum TaskKind {
+    Timer {
+        target: Instant,
+    },
+    TcpAccept {
+        listener_id: i64,
+    },
+    TcpConnect {
+        addr: String,
+    },
+    TcpRead {
+        stream_id: i64,
+        max_len: usize,
+    },
+    TcpWrite {
+        stream_id: i64,
+        data: Vec<u8>,
+    },
+    Timeout {
+        deadline: Instant,
+        inner: Rc<RefCell<TaskHandle>>,
+    },
+    Custom,
+}
+
+#[derive(Debug)]
+pub struct ScheduledTask {
+    pub handle: Rc<RefCell<TaskHandle>>,
+    pub kind: TaskKind,
 }
 
 pub struct Interpreter<W: Write> {
@@ -26,6 +60,11 @@ pub struct Interpreter<W: Write> {
     pub step_count: usize,
     pub max_steps: Option<usize>,
     pub main_called: bool,
+    pub next_task_id: u64,
+    pub scheduled_tasks: Vec<ScheduledTask>,
+    pub tcp_listeners: HashMap<i64, TcpListener>,
+    pub tcp_streams: HashMap<i64, TcpStream>,
+    pub next_sock_id: i64,
 }
 
 impl<W: Write> Interpreter<W> {
@@ -42,6 +81,11 @@ impl<W: Write> Interpreter<W> {
             step_count: 0,
             max_steps: None,
             main_called: false,
+            next_task_id: 1,
+            scheduled_tasks: Vec::new(),
+            tcp_listeners: HashMap::new(),
+            tcp_streams: HashMap::new(),
+            next_sock_id: 1,
         }
     }
 
@@ -87,7 +131,11 @@ impl<W: Write> Interpreter<W> {
         if !self.main_called {
             if let Some(main_func) = self.functions.get("main").cloned() {
                 self.main_called = true;
-                return self.call_function(&main_func, Vec::new());
+                let res = self.call_function(&main_func, Vec::new())?;
+                if main_func.is_async {
+                    return self.eval_await(&res, main_func.span);
+                }
+                return Ok(res);
             }
         }
 
@@ -650,6 +698,10 @@ impl<W: Write> Interpreter<W> {
                     _ => Ok(Value::Void),
                 }
             }
+            Expr::Await { expr, span } => {
+                let val = self.eval_expr(expr)?;
+                self.eval_await(&val, *span)
+            }
         }
     }
 
@@ -855,6 +907,10 @@ impl<W: Write> Interpreter<W> {
                 return Ok(res);
             }
 
+            if let Some(res) = self.eval_async_builtin(&ident.name, args, span)? {
+                return Ok(res);
+            }
+
             // Class constructor: ClassName(args...)
             if let Some(cls) = self.classes.get(&ident.name).cloned() {
                 let mut arg_vals = Vec::new();
@@ -907,13 +963,26 @@ impl<W: Write> Interpreter<W> {
             self.env.define(param.name.name.clone(), arg_val);
         }
 
+        let is_async = func.is_async;
         let res = self.eval_block(&func.body);
         self.env.pop_scope();
         self.call_depth -= 1;
 
-        match res? {
-            ControlFlow::Return(v) => Ok(v),
-            ControlFlow::None => Ok(Value::Void),
+        let ret_val = match res? {
+            ControlFlow::Return(v) => v,
+            ControlFlow::None => Value::Void,
+        };
+
+        if is_async {
+            let id = self.next_task_id;
+            self.next_task_id += 1;
+            let handle = Rc::new(RefCell::new(TaskHandle {
+                id,
+                state: FutureState::Completed(Box::new(ret_val)),
+            }));
+            Ok(Value::Future(handle))
+        } else {
+            Ok(ret_val)
         }
     }
 
@@ -1025,12 +1094,25 @@ impl<W: Write> Interpreter<W> {
                 self.env.define(param.name.name.clone(), arg_val);
             }
 
+            let is_async = method_decl.is_async;
             let res = self.eval_block(&method_decl.function.body)?;
             self.env.pop_scope();
 
-            match res {
-                ControlFlow::Return(v) => Ok(v),
-                ControlFlow::None => Ok(Value::Void),
+            let ret_val = match res {
+                ControlFlow::Return(v) => v,
+                ControlFlow::None => Value::Void,
+            };
+
+            if is_async {
+                let id = self.next_task_id;
+                self.next_task_id += 1;
+                let handle = Rc::new(RefCell::new(TaskHandle {
+                    id,
+                    state: FutureState::Completed(Box::new(ret_val)),
+                }));
+                Ok(Value::Future(handle))
+            } else {
+                Ok(ret_val)
             }
         } else {
             Err(RuntimeError::with_span(
@@ -1759,6 +1841,375 @@ impl<W: Write> Interpreter<W> {
                     )));
                 }
                 Ok(Some(Value::Void))
+            }
+            _ => Ok(None),
+        }
+    }
+
+    pub fn create_future(&mut self, kind: TaskKind) -> (Rc<RefCell<TaskHandle>>, Value) {
+        let id = self.next_task_id;
+        self.next_task_id += 1;
+        let handle = Rc::new(RefCell::new(TaskHandle {
+            id,
+            state: FutureState::Pending,
+        }));
+        self.scheduled_tasks.push(ScheduledTask {
+            handle: handle.clone(),
+            kind,
+        });
+        (handle.clone(), Value::Future(handle))
+    }
+
+    pub fn step_scheduler(&mut self) {
+        let now = Instant::now();
+        for task in &mut self.scheduled_tasks {
+            let mut handle = task.handle.borrow_mut();
+            if handle.state != FutureState::Pending {
+                continue;
+            }
+            match &task.kind {
+                TaskKind::Timer { target } => {
+                    if now >= *target {
+                        handle.state = FutureState::Completed(Box::new(Value::Void));
+                    }
+                }
+                TaskKind::TcpAccept { listener_id } => {
+                    if let Some(listener) = self.tcp_listeners.get(listener_id) {
+                        match listener.accept() {
+                            Ok((stream, _)) => {
+                                let _ = stream.set_nonblocking(true);
+                                let sid = self.next_sock_id;
+                                self.next_sock_id += 1;
+                                self.tcp_streams.insert(sid, stream);
+                                handle.state =
+                                    FutureState::Completed(Box::new(Value::Int(sid as i128)));
+                            }
+                            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
+                            Err(e) => {
+                                handle.state =
+                                    FutureState::Failed(format!("tcp_accept error: {}", e));
+                            }
+                        }
+                    } else {
+                        handle.state = FutureState::Failed("invalid listener id".to_string());
+                    }
+                }
+                TaskKind::TcpConnect { addr } => match TcpStream::connect(addr) {
+                    Ok(stream) => {
+                        let _ = stream.set_nonblocking(true);
+                        let sid = self.next_sock_id;
+                        self.next_sock_id += 1;
+                        self.tcp_streams.insert(sid, stream);
+                        handle.state = FutureState::Completed(Box::new(Value::Int(sid as i128)));
+                    }
+                    Err(e) => {
+                        handle.state = FutureState::Failed(format!("tcp_connect error: {}", e));
+                    }
+                },
+                TaskKind::TcpRead { stream_id, max_len } => {
+                    if let Some(stream) = self.tcp_streams.get_mut(stream_id) {
+                        use std::io::Read;
+                        let mut buf = vec![0u8; *max_len];
+                        match stream.read(&mut buf) {
+                            Ok(n) => {
+                                buf.truncate(n);
+                                let s = String::from_utf8_lossy(&buf).to_string();
+                                handle.state = FutureState::Completed(Box::new(Value::String(s)));
+                            }
+                            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
+                            Err(e) => {
+                                handle.state =
+                                    FutureState::Failed(format!("tcp_read error: {}", e));
+                            }
+                        }
+                    } else {
+                        handle.state = FutureState::Failed("invalid stream id".to_string());
+                    }
+                }
+                TaskKind::TcpWrite { stream_id, data } => {
+                    if let Some(stream) = self.tcp_streams.get_mut(stream_id) {
+                        use std::io::Write;
+                        match stream.write_all(data) {
+                            Ok(()) => {
+                                let _ = stream.flush();
+                                handle.state = FutureState::Completed(Box::new(Value::Int(
+                                    data.len() as i128,
+                                )));
+                            }
+                            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
+                            Err(e) => {
+                                handle.state =
+                                    FutureState::Failed(format!("tcp_write error: {}", e));
+                            }
+                        }
+                    } else {
+                        handle.state = FutureState::Failed("invalid stream id".to_string());
+                    }
+                }
+                TaskKind::Timeout { deadline, inner } => {
+                    let inner_state = inner.borrow().state.clone();
+                    match inner_state {
+                        FutureState::Completed(v) => {
+                            handle.state = FutureState::Completed(v);
+                        }
+                        FutureState::Failed(err) => {
+                            handle.state = FutureState::Failed(err);
+                        }
+                        FutureState::Cancelled => {
+                            handle.state = FutureState::Cancelled;
+                        }
+                        FutureState::Pending => {
+                            if now >= *deadline {
+                                inner.borrow_mut().state = FutureState::Cancelled;
+                                handle.state =
+                                    FutureState::Failed("operation timed out".to_string());
+                            }
+                        }
+                    }
+                }
+                TaskKind::Custom => {}
+            }
+        }
+        if self.scheduled_tasks.len() > 100 {
+            self.scheduled_tasks
+                .retain(|t| t.handle.borrow().state == FutureState::Pending);
+        }
+    }
+
+    pub fn eval_await(&mut self, val: &Value, span: Span) -> Result<Value, RuntimeError> {
+        let handle = match val {
+            Value::Future(h) => h.clone(),
+            other => return Ok(other.clone()),
+        };
+
+        loop {
+            self.step_scheduler();
+            let state = handle.borrow().state.clone();
+            match state {
+                FutureState::Completed(v) => return Ok(*v),
+                FutureState::Failed(err) => return Err(RuntimeError::with_span(err, span)),
+                FutureState::Cancelled => {
+                    return Err(RuntimeError::with_span("task was cancelled", span))
+                }
+                FutureState::Pending => {
+                    std::thread::sleep(std::time::Duration::from_millis(1));
+                }
+            }
+        }
+    }
+
+    pub fn eval_async_builtin(
+        &mut self,
+        name: &str,
+        args: &[Expr],
+        span: Span,
+    ) -> Result<Option<Value>, RuntimeError> {
+        match name {
+            "async_sleep" | "sleep" => {
+                let ms = if let Some(arg) = args.first() {
+                    match self.eval_expr(arg)?.unwrap_ref() {
+                        Value::Int(n) => n.max(0) as u64,
+                        Value::Float(f) => f.max(0.0) as u64,
+                        _ => 0,
+                    }
+                } else {
+                    0
+                };
+                let target = Instant::now() + std::time::Duration::from_millis(ms);
+                let (handle, val) = self.create_future(TaskKind::Timer { target });
+                if ms == 0 {
+                    handle.borrow_mut().state = FutureState::Completed(Box::new(Value::Void));
+                }
+                Ok(Some(val))
+            }
+            "tcp_listen" => {
+                let addr = if let Some(arg) = args.first() {
+                    match self.eval_expr(arg)?.unwrap_ref() {
+                        Value::String(s) => s,
+                        other => other.to_string(),
+                    }
+                } else {
+                    "127.0.0.1:0".to_string()
+                };
+                let id = self.next_sock_id;
+                self.next_sock_id += 1;
+                match TcpListener::bind(&addr) {
+                    Ok(listener) => {
+                        let _ = listener.set_nonblocking(true);
+                        self.tcp_listeners.insert(id, listener);
+                        let task_id = self.next_task_id;
+                        self.next_task_id += 1;
+                        let handle = Rc::new(RefCell::new(TaskHandle {
+                            id: task_id,
+                            state: FutureState::Completed(Box::new(Value::Int(id as i128))),
+                        }));
+                        Ok(Some(Value::Future(handle)))
+                    }
+                    Err(e) => {
+                        let task_id = self.next_task_id;
+                        self.next_task_id += 1;
+                        let handle = Rc::new(RefCell::new(TaskHandle {
+                            id: task_id,
+                            state: FutureState::Failed(format!("tcp_listen bind error: {}", e)),
+                        }));
+                        Ok(Some(Value::Future(handle)))
+                    }
+                }
+            }
+            "tcp_accept" => {
+                let listener_id = if let Some(arg) = args.first() {
+                    match self.eval_expr(arg)?.unwrap_ref() {
+                        Value::Int(n) => n as i64,
+                        _ => -1,
+                    }
+                } else {
+                    -1
+                };
+                let (_handle, val) = self.create_future(TaskKind::TcpAccept { listener_id });
+                Ok(Some(val))
+            }
+            "tcp_connect" => {
+                let addr = if let Some(arg) = args.first() {
+                    match self.eval_expr(arg)?.unwrap_ref() {
+                        Value::String(s) => s,
+                        other => other.to_string(),
+                    }
+                } else {
+                    "".to_string()
+                };
+                let (_handle, val) = self.create_future(TaskKind::TcpConnect { addr });
+                Ok(Some(val))
+            }
+            "tcp_read" => {
+                let stream_id = if let Some(arg) = args.first() {
+                    match self.eval_expr(arg)?.unwrap_ref() {
+                        Value::Int(n) => n as i64,
+                        _ => -1,
+                    }
+                } else {
+                    -1
+                };
+                let max_len = if let Some(arg) = args.get(1) {
+                    match self.eval_expr(arg)?.unwrap_ref() {
+                        Value::Int(n) => n.max(0) as usize,
+                        _ => 1024,
+                    }
+                } else {
+                    1024
+                };
+                let (_handle, val) = self.create_future(TaskKind::TcpRead { stream_id, max_len });
+                Ok(Some(val))
+            }
+            "tcp_write" => {
+                let stream_id = if let Some(arg) = args.first() {
+                    match self.eval_expr(arg)?.unwrap_ref() {
+                        Value::Int(n) => n as i64,
+                        _ => -1,
+                    }
+                } else {
+                    -1
+                };
+                let data = if let Some(arg) = args.get(1) {
+                    match self.eval_expr(arg)?.unwrap_ref() {
+                        Value::String(s) => s.into_bytes(),
+                        other => other.to_string().into_bytes(),
+                    }
+                } else {
+                    Vec::new()
+                };
+                let (_handle, val) = self.create_future(TaskKind::TcpWrite { stream_id, data });
+                Ok(Some(val))
+            }
+            "tcp_close" => {
+                let id = if let Some(arg) = args.first() {
+                    match self.eval_expr(arg)?.unwrap_ref() {
+                        Value::Int(n) => n as i64,
+                        _ => -1,
+                    }
+                } else {
+                    -1
+                };
+                self.tcp_listeners.remove(&id);
+                self.tcp_streams.remove(&id);
+                Ok(Some(Value::Void))
+            }
+            "task_spawn" => {
+                if let Some(arg) = args.first() {
+                    let val = self.eval_expr(arg)?;
+                    match val {
+                        Value::Future(h) => Ok(Some(Value::Future(h))),
+                        other => {
+                            let id = self.next_task_id;
+                            self.next_task_id += 1;
+                            let handle = Rc::new(RefCell::new(TaskHandle {
+                                id,
+                                state: FutureState::Completed(Box::new(other)),
+                            }));
+                            Ok(Some(Value::Future(handle)))
+                        }
+                    }
+                } else {
+                    Ok(Some(Value::Null))
+                }
+            }
+            "task_join" => {
+                if let Some(arg) = args.first() {
+                    let val = self.eval_expr(arg)?;
+                    let res = self.eval_await(&val, span)?;
+                    Ok(Some(res))
+                } else {
+                    Err(RuntimeError::with_span(
+                        "task_join requires 1 argument",
+                        span,
+                    ))
+                }
+            }
+            "task_cancel" => {
+                if let Some(arg) = args.first() {
+                    let val = self.eval_expr(arg)?;
+                    match val {
+                        Value::Future(h) => {
+                            h.borrow_mut().state = FutureState::Cancelled;
+                            Ok(Some(Value::Bool(true)))
+                        }
+                        _ => Ok(Some(Value::Bool(false))),
+                    }
+                } else {
+                    Ok(Some(Value::Bool(false)))
+                }
+            }
+            "timeout" => {
+                let ms = if let Some(arg) = args.first() {
+                    match self.eval_expr(arg)?.unwrap_ref() {
+                        Value::Int(n) => n.max(0) as u64,
+                        Value::Float(f) => f.max(0.0) as u64,
+                        _ => 0,
+                    }
+                } else {
+                    0
+                };
+                let deadline = Instant::now() + std::time::Duration::from_millis(ms);
+                let fut_val = if let Some(arg) = args.get(1) {
+                    self.eval_expr(arg)?
+                } else {
+                    Value::Null
+                };
+                match fut_val {
+                    Value::Future(inner) => {
+                        let (_handle, val) =
+                            self.create_future(TaskKind::Timeout { deadline, inner });
+                        Ok(Some(val))
+                    }
+                    other => {
+                        let id = self.next_task_id;
+                        self.next_task_id += 1;
+                        let handle = Rc::new(RefCell::new(TaskHandle {
+                            id,
+                            state: FutureState::Completed(Box::new(other)),
+                        }));
+                        Ok(Some(Value::Future(handle)))
+                    }
+                }
             }
             _ => Ok(None),
         }

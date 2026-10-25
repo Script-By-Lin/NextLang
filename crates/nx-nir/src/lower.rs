@@ -81,6 +81,29 @@ impl AstLowering {
         extern_functions.insert("assert".to_string(), NirType::Void);
         extern_functions.insert("nx_rt_assert_eq".to_string(), NirType::Void);
         extern_functions.insert("assert_eq".to_string(), NirType::Void);
+        // Phase 10: Asynchronous Runtime Primitives
+        extern_functions.insert("nx_rt_async_sleep".to_string(), NirType::Void);
+        extern_functions.insert("async_sleep".to_string(), NirType::Void);
+        extern_functions.insert("sleep".to_string(), NirType::Void);
+        extern_functions.insert("nx_rt_tcp_listen".to_string(), NirType::I64);
+        extern_functions.insert("tcp_listen".to_string(), NirType::I64);
+        extern_functions.insert("nx_rt_tcp_accept".to_string(), NirType::I64);
+        extern_functions.insert("tcp_accept".to_string(), NirType::I64);
+        extern_functions.insert("nx_rt_tcp_connect".to_string(), NirType::I64);
+        extern_functions.insert("tcp_connect".to_string(), NirType::I64);
+        extern_functions.insert("nx_rt_tcp_read_str".to_string(), NirType::Ptr);
+        extern_functions.insert("tcp_read".to_string(), NirType::Ptr);
+        extern_functions.insert("nx_rt_tcp_write_str".to_string(), NirType::I64);
+        extern_functions.insert("tcp_write".to_string(), NirType::I64);
+        extern_functions.insert("nx_rt_tcp_close".to_string(), NirType::Void);
+        extern_functions.insert("tcp_close".to_string(), NirType::Void);
+        extern_functions.insert("nx_rt_task_spawn".to_string(), NirType::I64);
+        extern_functions.insert("task_spawn".to_string(), NirType::I64);
+        extern_functions.insert("nx_rt_task_join".to_string(), NirType::Ptr);
+        extern_functions.insert("task_join".to_string(), NirType::Ptr);
+        extern_functions.insert("nx_rt_task_cancel".to_string(), NirType::Bool);
+        extern_functions.insert("task_cancel".to_string(), NirType::Bool);
+        extern_functions.insert("timeout".to_string(), NirType::Ptr);
 
         Self {
             module: NirModule::new(module_name),
@@ -469,6 +492,7 @@ impl AstLowering {
         if f.name.name == "main" {
             func.is_entry = true;
         }
+        func.is_async = f.is_async;
 
         self.current_fn = Some(func);
         self.start_block("entry");
@@ -1628,6 +1652,7 @@ impl AstLowering {
                 }
                 NirOperand::Var(struct_ptr)
             }
+            Expr::Await { expr, .. } => self.lower_expr(expr),
         }
     }
 
@@ -1790,7 +1815,16 @@ impl AstLowering {
                 "VOID" => NirType::Void,
                 _ => NirType::Ptr,
             },
-            Type::Generic { name, .. } => match name.as_str() {
+            Type::Generic {
+                name, type_args, ..
+            } => match name.as_str() {
+                "FUTURE" | "TASK" => {
+                    if let Some(inner) = type_args.first() {
+                        self.map_type(inner)
+                    } else {
+                        NirType::Ptr
+                    }
+                }
                 "HEAP" | "LIST" | "SET" | "MAP" => NirType::Ptr,
                 _ => NirType::Ptr,
             },

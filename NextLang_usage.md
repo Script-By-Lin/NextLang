@@ -987,3 +987,99 @@ nx fmt
 // Verify formatting in continuous integration without modifying files
 nx fmt --check
 </code></pre>
+
+<hr>
+
+<h2>17. Asynchronous Programming (Async/Await and Tasks)</h2>
+
+<p>
+NextLang provides built-in first-class asynchronous programming support designed for scalable, non-blocking I/O, timers, and cooperative task scheduling across all execution tiers.
+</p>
+
+<h3>Async Function Declaration</h3>
+<p>
+An asynchronous function is declared using the <b>async fn</b> keyword sequence. An async function returning type <b>T</b> has a runtime representation of <b>FUTURE&lt;T&gt;</b>.
+</p>
+
+<pre><code>async fn fetch_user_id(username:&lt;STRING&gt;):&lt;INT64&gt; {
+    await sleep(20);
+    return 1001;
+}
+</code></pre>
+
+<h3>Awaiting Futures</h3>
+<p>
+The <b>await</b> prefix expression pauses execution of the current asynchronous function until the future resolves, unwrapping the underlying value.
+</p>
+
+<pre><code>async fn main():&lt;VOID&gt; {
+    var fut:&lt;FUTURE&lt;INT64&gt;&gt; = fetch_user_id("alice");
+    var id:&lt;INT64&gt; = await fut;
+    vout("User ID:", id);
+}
+</code></pre>
+
+<h3>Compile-Time Safety Rules</h3>
+<p>
+NextLang enforces strict static validation for asynchronous code:
+</p>
+<p>
+1. <b>Await Context:</b> The <b>await</b> operator is strictly permitted only inside functions marked with <b>async fn</b>. Using await in a synchronous function triggers compiler error NX-ASYNC-001.<br>
+2. <b>Future Type Checking:</b> Awaiting an expression whose type is not a future triggers compiler error NX-TYPE-001.<br>
+3. <b>Borrow Invariant Across Suspension:</b> Retaining an active mutable borrow across an await point is forbidden and triggers compile error NX-OWN-004. This prevents data races and invalidated references when execution suspends.
+</p>
+
+<h3>Task Spawning and Joining</h3>
+<p>
+Tasks can be spawned concurrently and joined cooperatively using standard built-in functions:
+</p>
+
+<pre><code>async fn worker(id:&lt;INT32&gt;):&lt;STRING&gt; {
+    await sleep(50);
+    return "Task completed";
+}
+
+async fn main():&lt;VOID&gt; {
+    var t1:&lt;FUTURE&lt;STRING&gt;&gt; = task_spawn(worker(1));
+    var t2:&lt;FUTURE&lt;STRING&gt;&gt; = task_spawn(worker(2));
+
+    var r1:&lt;STRING&gt; = task_join(t1);
+    var r2:&lt;STRING&gt; = task_join(t2);
+
+    vout(r1, r2);
+}
+</code></pre>
+
+<h3>Timers and Non-Blocking TCP Sockets</h3>
+<p>
+NextLang provides genuinely non-blocking timers and operating system socket I/O:
+</p>
+
+<pre><code>async fn run_server():&lt;VOID&gt; {
+    var server:&lt;FUTURE&lt;INT64&gt;&gt; = tcp_listen("127.0.0.1:8080");
+    var server_fd:&lt;INT64&gt; = await server;
+
+    var client:&lt;FUTURE&lt;INT64&gt;&gt; = tcp_accept(server_fd);
+    var client_fd:&lt;INT64&gt; = await client;
+
+    var read_fut:&lt;FUTURE&lt;STRING&gt;&gt; = tcp_read(client_fd, 1024);
+    var req:&lt;STRING&gt; = await read_fut;
+
+    var write_fut:&lt;FUTURE&lt;INT64&gt;&gt; = tcp_write(client_fd, "OK");
+    await write_fut;
+
+    tcp_close(client_fd);
+    tcp_close(server_fd);
+}
+</code></pre>
+
+<h3>Multi-Tier Execution Support</h3>
+<p>
+Asynchronous NextLang code executes identically across all three compilation tiers:
+</p>
+<p>
+1. <b>Tree-Walk Interpreter:</b> Managed cooperative single-threaded event loop with non-blocking socket polling and millisecond timer queues.<br>
+2. <b>LLVM Native Backend:</b> Compiles directly to native code utilizing the high-performance C runtime event loop with POSIX socket polling and pthread worker tasks.<br>
+3. <b>JavaScript Backend:</b> Lowers async functions directly into native ECMAScript <b>async function</b> declarations and <b>await</b> expressions backed by standard JavaScript Promises.
+</p>
+

@@ -222,7 +222,17 @@ impl<'a> Parser<'a> {
             TokenKind::Var => self.parse_var_decl(VarKind::Var),
             TokenKind::Const => self.parse_var_decl(VarKind::Const),
             TokenKind::Tem => self.parse_var_decl(VarKind::Tem),
-            TokenKind::Fn => self.parse_fn_decl(),
+            TokenKind::Fn => self.parse_fn_decl(false, None),
+            TokenKind::Async => {
+                let async_span = self.advance().span;
+                if self.check(&TokenKind::Fn) {
+                    self.parse_fn_decl(true, Some(async_span))
+                } else {
+                    self.diagnostics
+                        .error(async_span, "expected 'fn' after 'async'");
+                    None
+                }
+            }
             TokenKind::If => self.parse_if_stmt(),
             TokenKind::As => self.parse_as_loop(),
             TokenKind::Fr => self.parse_for_loop(),
@@ -478,8 +488,9 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_fn_decl(&mut self) -> Option<Stmt> {
-        let start_span = self.advance().span; // consume 'fn'
+    fn parse_fn_decl(&mut self, is_async: bool, async_span: Option<Span>) -> Option<Stmt> {
+        let fn_span = self.advance().span; // consume 'fn'
+        let start_span = async_span.map(|s| s.merge(fn_span)).unwrap_or(fn_span);
 
         let name = match self.peek_kind() {
             TokenKind::Ident(_) => {
@@ -542,6 +553,7 @@ impl<'a> Parser<'a> {
             params,
             return_type,
             body,
+            is_async,
             span,
         }))
     }
@@ -634,6 +646,7 @@ impl<'a> Parser<'a> {
         let mut is_static = false;
         let mut is_abstract = false;
         let mut is_final = false;
+        let mut is_async = false;
 
         loop {
             match self.peek_kind() {
@@ -660,6 +673,10 @@ impl<'a> Parser<'a> {
                 TokenKind::Final => {
                     self.advance();
                     is_final = true;
+                }
+                TokenKind::Async => {
+                    self.advance();
+                    is_async = true;
                 }
                 _ => break,
             }
@@ -762,11 +779,13 @@ impl<'a> Parser<'a> {
                     is_static,
                     is_abstract,
                     is_final,
+                    is_async,
                     function: FunctionDecl {
                         name,
                         params,
                         return_type,
                         body,
+                        is_async,
                         span,
                     },
                     span,
@@ -1768,6 +1787,15 @@ impl<'a> Parser<'a> {
                 Some(Expr::Free {
                     target: Box::new(target),
                     span: start_span.merge(close.span),
+                })
+            }
+            TokenKind::Await => {
+                let start_span = self.advance().span;
+                let expr = self.parse_precedence(Precedence::Unary)?;
+                let span = start_span.merge(expr.span());
+                Some(Expr::Await {
+                    expr: Box::new(expr),
+                    span,
                 })
             }
             TokenKind::OpenBracket => self.parse_list_literal(),

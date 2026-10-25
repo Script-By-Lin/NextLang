@@ -63,8 +63,9 @@ impl JsEmitter {
         // Emit automatic main() call if present and configured
         if self.has_main && self.config.auto_invoke_main {
             self.output.push_str("\n// Automatic main entry point\n");
-            self.output
-                .push_str("if (typeof main === 'function') {\n    main();\n}\n");
+            self.output.push_str(
+                "if (typeof main === 'function') {\n    const _res = main();\n    if (_res && typeof _res.catch === 'function') {\n        _res.catch(console.error);\n    }\n}\n",
+            );
         }
 
         self.output
@@ -340,10 +341,15 @@ impl JsEmitter {
         let indent = self.indent_str();
         let params: Vec<String> = f.params.iter().map(|p| p.name.name.clone()).collect();
         let params_str = params.join(", ");
+        let fn_kw = if f.is_async {
+            "async function"
+        } else {
+            "function"
+        };
 
         self.output.push_str(&format!(
-            "{}function {}({}) {{\n",
-            indent, f.name.name, params_str
+            "{}{} {}({}) {{\n",
+            indent, fn_kw, f.name.name, params_str
         ));
         self.indent_level += 1;
         for s in &f.body.statements {
@@ -435,7 +441,8 @@ impl JsEmitter {
         // Emit methods
         for m in &methods {
             let m_indent = self.indent_str();
-            let prefix = if m.is_static { "static " } else { "" };
+            let static_prefix = if m.is_static { "static " } else { "" };
+            let async_prefix = if m.is_async { "async " } else { "" };
             let params = m
                 .function
                 .params
@@ -445,8 +452,8 @@ impl JsEmitter {
                 .join(", ");
 
             self.output.push_str(&format!(
-                "{}{}{}({}) {{\n",
-                m_indent, prefix, m.function.name.name, params
+                "{}{}{}{}({}) {{\n",
+                m_indent, static_prefix, async_prefix, m.function.name.name, params
             ));
             self.indent_level += 1;
             for s in &m.function.body.statements {
@@ -735,6 +742,10 @@ impl JsEmitter {
                     })
                     .collect();
                 format!("({{ {} }})", f_strs.join(", "))
+            }
+            Expr::Await { expr, .. } => {
+                let inner = self.emit_expr_to_string(expr);
+                format!("(await {})", inner)
             }
         }
     }

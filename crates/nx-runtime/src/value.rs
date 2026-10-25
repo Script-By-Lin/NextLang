@@ -29,8 +29,23 @@ pub enum Value {
     },
     Heap(HeapHandle),
     Reference(Rc<RefCell<Value>>),
+    Future(Rc<RefCell<TaskHandle>>),
     Null,
     Void,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum FutureState {
+    Pending,
+    Completed(Box<Value>),
+    Failed(String),
+    Cancelled,
+}
+
+#[derive(Debug, Clone)]
+pub struct TaskHandle {
+    pub id: u64,
+    pub state: FutureState,
 }
 
 impl Value {
@@ -59,6 +74,7 @@ impl Value {
             Value::Struct { .. } => "STRUCT",
             Value::Heap(_) => "HEAP",
             Value::Reference(_) => "REFERENCE",
+            Value::Future(_) => "FUTURE",
             Value::Null => "NULL",
             Value::Void => "VOID",
         }
@@ -288,6 +304,7 @@ impl fmt::Display for Value {
             }
             Value::Heap(h) => write!(f, "<heap slot={} gen={}>", h.slot, h.generation),
             Value::Reference(r) => write!(f, "&{}", r.borrow()),
+            Value::Future(h) => write!(f, "<future #{}>", h.borrow().id),
             Value::Null => write!(f, "null"),
             Value::Void => Ok(()),
         }

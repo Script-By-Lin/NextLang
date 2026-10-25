@@ -1,0 +1,48 @@
+// NextLang Standard Library: async
+// Asynchronous primitives, timers, tasks, and non-blocking TCP networking
+
+async fn sleep(ms:<INT64>):<VOID> {
+    await async_sleep(ms);
+}
+
+async fn async_delay(ms:<INT64>):<VOID> {
+    await async_sleep(ms);
+}
+
+async fn net_listen(addr:<STRING>):<INT64> {
+    var fut:<FUTURE<INT64>> = tcp_listen(addr);
+    return await fut;
+}
+
+async fn net_accept(listener_id:<INT64>):<INT64> {
+    var fut:<FUTURE<INT64>> = tcp_accept(listener_id);
+    return await fut;
+}
+
+async fn net_connect(addr:<STRING>):<INT64> {
+    var fut:<FUTURE<INT64>> = tcp_connect(addr);
+    return await fut;
+}
+
+async fn net_read(stream_id:<INT64>, max_len:<INT64>):<STRING> {
+    var fut:<FUTURE<STRING>> = tcp_read(stream_id, max_len);
+    return await fut;
+}
+
+async fn net_write(stream_id:<INT64>, data:<STRING>):<INT64> {
+    var fut:<FUTURE<INT64>> = tcp_write(stream_id, data);
+    return await fut;
+}
+
+fn net_close(id:<INT64>):<VOID> {
+    tcp_close(id);
+}
+
+fn cancel_task(task:<FUTURE<VOID>>):<BOOL> {
+    return task_cancel(task);
+}
+
+async fn with_timeout(ms:<INT64>, fut:<FUTURE<VOID>>):<VOID> {
+    var t:<FUTURE<VOID>> = timeout(ms, fut);
+    await t;
+}

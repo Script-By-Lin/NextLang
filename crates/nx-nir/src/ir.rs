@@ -249,6 +249,7 @@ pub struct NirFunction {
     pub ret_ty: NirType,
     pub blocks: Vec<NirBlock>,
     pub is_entry: bool,
+    pub is_async: bool,
 }
 
 impl NirFunction {
@@ -259,6 +260,7 @@ impl NirFunction {
             ret_ty,
             blocks: Vec::new(),
             is_entry: false,
+            is_async: false,
         }
     }
 }

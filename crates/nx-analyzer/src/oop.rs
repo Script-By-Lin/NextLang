@@ -23,6 +23,7 @@ pub struct ClassMethodSymbol {
     pub is_static: bool,
     pub is_abstract: bool,
     pub is_final: bool,
+    pub is_async: bool,
     pub span: Span,
 }
 

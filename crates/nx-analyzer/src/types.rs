@@ -45,6 +45,9 @@ pub enum SemType {
     // Reference types (&T, &mut T)
     Reference { inner: Box<SemType>, is_mut: bool },
 
+    // Asynchronous Future / Promise type
+    Future(Box<SemType>),
+
     // Custom named types
     Custom(String),
 
@@ -83,6 +86,13 @@ impl SemType {
                         .map(Self::from_ast)
                         .unwrap_or(SemType::Unknown);
                     SemType::Map(Box::new(key), Box::new(val))
+                }
+                "FUTURE" | "TASK" => {
+                    let elem = type_args
+                        .first()
+                        .map(Self::from_ast)
+                        .unwrap_or(SemType::Unknown);
+                    SemType::Future(Box::new(elem))
                 }
                 _ => SemType::Custom(name.clone()),
             },
@@ -274,6 +284,9 @@ impl SemType {
                 src_k.is_assignable_to_with_hierarchy(dst_k, hierarchy)
                     && src_v.is_assignable_to_with_hierarchy(dst_v, hierarchy)
             }
+            (SemType::Future(src_inner), SemType::Future(dst_inner)) => {
+                src_inner.is_assignable_to_with_hierarchy(dst_inner, hierarchy)
+            }
             _ => false,
         }
     }
@@ -367,6 +380,7 @@ impl fmt::Display for SemType {
                     write!(f, "&{}", inner)
                 }
             }
+            SemType::Future(inner) => write!(f, "FUTURE<{}>", inner),
             SemType::Unknown => write!(f, "<unknown>"),
         }
     }

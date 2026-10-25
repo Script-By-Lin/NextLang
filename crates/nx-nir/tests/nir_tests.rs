@@ -129,3 +129,22 @@ fn main() {
     assert!(nir.contains("unop BitNot"));
     assert!(nir.contains("call abs("));
 }
+
+#[test]
+fn test_nir_phase10_async_await() {
+    let src = r#"
+async fn fetch_val():<INT32> {
+    await sleep(10);
+    return 42;
+}
+
+async fn main() {
+    var val:<INT32> = await fetch_val();
+    vout("val:", val);
+}
+"#;
+    let nir = lower(src);
+    assert!(nir.contains("fn fetch_val() -> I32"));
+    assert!(nir.contains("call sleep("));
+    assert!(nir.contains("call fetch_val("));
+}

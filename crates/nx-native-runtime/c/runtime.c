@@ -6,6 +6,14 @@
 #include <math.h>
 #include <errno.h>
 #include <time.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <poll.h>
+#include <pthread.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 void nx_rt_vout_str(const char *str) {
     if (str) {
@@ -752,4 +760,207 @@ void assert(int8_t cond, const char *msg) {
 void assert_eq(const char *actual, const char *expected, const char *msg) {
     nx_rt_assert_eq(actual, expected, msg);
 }
+
+// Phase 10: Asynchronous Runtime & Network I/O Implementation
+
+typedef struct NxTask {
+    pthread_t thread;
+    void* (*fn)(void*);
+    void *arg;
+    void *result;
+    volatile int8_t completed;
+    volatile int8_t cancelled;
+} NxTask;
+
+static void* nx_rt_task_worker(void *data) {
+    NxTask *task = (NxTask *)data;
+    if (task && !task->cancelled && task->fn) {
+        task->result = task->fn(task->arg);
+    }
+    if (task) {
+        task->completed = 1;
+    }
+    return NULL;
+}
+
+void nx_rt_async_sleep(int64_t ms) {
+    if (ms <= 0) return;
+    poll(NULL, 0, (int)ms);
+}
+
+int64_t nx_rt_tcp_listen(const char *host, int32_t port) {
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) return -1;
+    int opt = 1;
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    int flags = fcntl(fd, F_GETFL, 0);
+    fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons((uint16_t)port);
+    if (!host || strcmp(host, "0.0.0.0") == 0 || strcmp(host, "localhost") == 0) {
+        addr.sin_addr.s_addr = INADDR_ANY;
+    } else {
+        inet_pton(AF_INET, host, &addr.sin_addr);
+    }
+
+    if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+        close(fd);
+        return -1;
+    }
+    if (listen(fd, 128) < 0) {
+        close(fd);
+        return -1;
+    }
+    return (int64_t)fd;
+}
+
+int64_t nx_rt_tcp_accept(int64_t server_fd) {
+    if (server_fd < 0) return -1;
+    struct pollfd pfd;
+    pfd.fd = (int)server_fd;
+    pfd.events = POLLIN;
+    int ret = poll(&pfd, 1, 5000);
+    if (ret <= 0) return -1;
+
+    struct sockaddr_in client_addr;
+    socklen_t client_len = sizeof(client_addr);
+    int client_fd = accept((int)server_fd, (struct sockaddr *)&client_addr, &client_len);
+    if (client_fd < 0) return -1;
+
+    int flags = fcntl(client_fd, F_GETFL, 0);
+    fcntl(client_fd, F_SETFL, flags | O_NONBLOCK);
+    return (int64_t)client_fd;
+}
+
+int64_t nx_rt_tcp_connect(const char *host, int32_t port) {
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) return -1;
+
+    int flags = fcntl(fd, F_GETFL, 0);
+    fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons((uint16_t)port);
+    const char *target_ip = (host && strcmp(host, "localhost") != 0) ? host : "127.0.0.1";
+    inet_pton(AF_INET, target_ip, &addr.sin_addr);
+
+    int res = connect(fd, (struct sockaddr *)&addr, sizeof(addr));
+    if (res < 0) {
+        if (errno == EINPROGRESS) {
+            struct pollfd pfd;
+            pfd.fd = fd;
+            pfd.events = POLLOUT;
+            int pret = poll(&pfd, 1, 5000);
+            if (pret <= 0) {
+                close(fd);
+                return -1;
+            }
+            int err = 0;
+            socklen_t len = sizeof(err);
+            if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &len) < 0 || err != 0) {
+                close(fd);
+                return -1;
+            }
+        } else {
+            close(fd);
+            return -1;
+        }
+    }
+    return (int64_t)fd;
+}
+
+int64_t nx_rt_tcp_read(int64_t fd, char *buf, int64_t max_len) {
+    if (fd < 0 || !buf || max_len <= 0) return -1;
+    struct pollfd pfd;
+    pfd.fd = (int)fd;
+    pfd.events = POLLIN;
+    int pret = poll(&pfd, 1, 5000);
+    if (pret <= 0) return 0;
+    ssize_t n = recv((int)fd, buf, (size_t)max_len, 0);
+    return (int64_t)n;
+}
+
+const char* nx_rt_tcp_read_str(int64_t fd, int64_t max_len) {
+    if (fd < 0 || max_len <= 0) return "";
+    char *buf = (char *)malloc((size_t)max_len + 1);
+    if (!buf) return "";
+    int64_t n = nx_rt_tcp_read(fd, buf, max_len);
+    if (n <= 0) {
+        free(buf);
+        return "";
+    }
+    buf[n] = '\0';
+    return buf;
+}
+
+int64_t nx_rt_tcp_write(int64_t fd, const char *data, int64_t len) {
+    if (fd < 0 || !data || len <= 0) return -1;
+    struct pollfd pfd;
+    pfd.fd = (int)fd;
+    pfd.events = POLLOUT;
+    int pret = poll(&pfd, 1, 5000);
+    if (pret <= 0) return 0;
+    ssize_t n = send((int)fd, data, (size_t)len, 0);
+    return (int64_t)n;
+}
+
+int64_t nx_rt_tcp_write_str(int64_t fd, const char *data) {
+    if (!data) return 0;
+    return nx_rt_tcp_write(fd, data, (int64_t)strlen(data));
+}
+
+void nx_rt_tcp_close(int64_t fd) {
+    if (fd >= 0) {
+        close((int)fd);
+    }
+}
+
+void* nx_rt_task_spawn(void* (*fn)(void*), void *arg) {
+    NxTask *task = (NxTask *)malloc(sizeof(NxTask));
+    if (!task) return NULL;
+    task->fn = fn;
+    task->arg = arg;
+    task->result = NULL;
+    task->completed = 0;
+    task->cancelled = 0;
+    if (pthread_create(&task->thread, NULL, nx_rt_task_worker, task) != 0) {
+        free(task);
+        return NULL;
+    }
+    return task;
+}
+
+void* nx_rt_task_join(void *task_ptr) {
+    NxTask *task = (NxTask *)task_ptr;
+    if (!task) return NULL;
+    pthread_join(task->thread, NULL);
+    void *res = task->result;
+    free(task);
+    return res;
+}
+
+int8_t nx_rt_task_cancel(void *task_ptr) {
+    NxTask *task = (NxTask *)task_ptr;
+    if (!task) return 0;
+    task->cancelled = 1;
+    return 1;
+}
+
+void async_sleep(int64_t ms) { nx_rt_async_sleep(ms); }
+int64_t tcp_listen(const char *host, int32_t port) { return nx_rt_tcp_listen(host, port); }
+int64_t tcp_accept(int64_t server_fd) { return nx_rt_tcp_accept(server_fd); }
+int64_t tcp_connect(const char *host, int32_t port) { return nx_rt_tcp_connect(host, port); }
+int64_t tcp_read(int64_t fd, char *buf, int64_t max_len) { return nx_rt_tcp_read(fd, buf, max_len); }
+const char* tcp_read_str(int64_t fd, int64_t max_len) { return nx_rt_tcp_read_str(fd, max_len); }
+int64_t tcp_write(int64_t fd, const char *data, int64_t len) { return nx_rt_tcp_write(fd, data, len); }
+int64_t tcp_write_str(int64_t fd, const char *data) { return nx_rt_tcp_write_str(fd, data); }
+void tcp_close(int64_t fd) { nx_rt_tcp_close(fd); }
+void* task_spawn(void* (*fn)(void*), void *arg) { return nx_rt_task_spawn(fn, arg); }
+void* task_join(void *task) { return nx_rt_task_join(task); }
+int8_t task_cancel(void *task) { return nx_rt_task_cancel(task); }
 

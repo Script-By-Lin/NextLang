@@ -51,6 +51,10 @@ pub enum TokenKind {
     Import,
     Test,
 
+    // Phase 10: Async/Await Language Support
+    Async,
+    Await,
+
     // Identifiers and Literals
     Ident(String),
     Int(i128),
@@ -144,6 +148,8 @@ impl TokenKind {
             TokenKind::Extern => "extern",
             TokenKind::Import => "import",
             TokenKind::Test => "test",
+            TokenKind::Async => "async",
+            TokenKind::Await => "await",
             TokenKind::Ident(_) => "identifier",
             TokenKind::Int(_) => "integer",
             TokenKind::Float(_) => "float",
@@ -373,6 +379,8 @@ impl<'a> Lexer<'a> {
                     "extern" => TokenKind::Extern,
                     "import" => TokenKind::Import,
                     "test" => TokenKind::Test,
+                    "async" => TokenKind::Async,
+                    "await" => TokenKind::Await,
                     _ => TokenKind::Ident(ident_str.to_string()),
                 };
                 return Token::new(kind, span, ident_str);
@@ -764,5 +772,20 @@ mod tests {
         assert_eq!(tokens[2].kind, TokenKind::Semicolon);
         assert_eq!(tokens[3].kind, TokenKind::Test);
         assert_eq!(tokens[4].kind, TokenKind::Str("demo".into()));
+    }
+
+    #[test]
+    fn test_phase10_keywords() {
+        let mut bag = DiagnosticBag::new();
+        let src = "async fn fetch():<STRING> { return await get_data(); }";
+        let mut lexer = Lexer::new(src);
+        let tokens = lexer.tokenize(&mut bag);
+        assert!(!bag.has_errors());
+        assert_eq!(tokens[0].kind, TokenKind::Async);
+        assert_eq!(tokens[1].kind, TokenKind::Fn);
+        assert_eq!(tokens[2].kind, TokenKind::Ident("fetch".into()));
+        assert_eq!(tokens[10].kind, TokenKind::Return);
+        assert_eq!(tokens[11].kind, TokenKind::Await);
+        assert_eq!(tokens[12].kind, TokenKind::Ident("get_data".into()));
     }
 }

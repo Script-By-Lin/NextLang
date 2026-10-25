@@ -180,6 +180,31 @@ impl LlvmCompiler {
         out.push_str("declare void @nx_rt_assert_eq(ptr, ptr, ptr)\n");
         out.push_str("declare void @assert_eq(ptr, ptr, ptr)\n\n");
 
+        // Phase 10 Asynchronous Runtime Primitives
+        out.push_str("; Phase 10 Asynchronous Runtime Primitives\n");
+        out.push_str("declare void @nx_rt_async_sleep(i64)\n");
+        out.push_str("declare void @async_sleep(i64)\n");
+        out.push_str("declare void @sleep(i64)\n");
+        out.push_str("declare i64 @nx_rt_tcp_listen(ptr)\n");
+        out.push_str("declare i64 @tcp_listen(ptr)\n");
+        out.push_str("declare i64 @nx_rt_tcp_accept(i64)\n");
+        out.push_str("declare i64 @tcp_accept(i64)\n");
+        out.push_str("declare i64 @nx_rt_tcp_connect(ptr)\n");
+        out.push_str("declare i64 @tcp_connect(ptr)\n");
+        out.push_str("declare ptr @nx_rt_tcp_read_str(i64, i64)\n");
+        out.push_str("declare ptr @tcp_read(i64, i64)\n");
+        out.push_str("declare i64 @nx_rt_tcp_write_str(i64, ptr)\n");
+        out.push_str("declare i64 @tcp_write(i64, ptr)\n");
+        out.push_str("declare void @nx_rt_tcp_close(i64)\n");
+        out.push_str("declare void @tcp_close(i64)\n");
+        out.push_str("declare i64 @nx_rt_task_spawn(ptr, ptr)\n");
+        out.push_str("declare i64 @task_spawn(ptr, ptr)\n");
+        out.push_str("declare ptr @nx_rt_task_join(i64)\n");
+        out.push_str("declare ptr @task_join(i64)\n");
+        out.push_str("declare i1 @nx_rt_task_cancel(i64)\n");
+        out.push_str("declare i1 @task_cancel(i64)\n");
+        out.push_str("declare ptr @timeout(i64, ptr)\n\n");
+
         // 5. External C functions (e.g., abs, puts, etc.)
         let mut declared_externs: HashSet<String> = HashSet::new();
         let internal_funcs: HashSet<String> =
@@ -254,6 +279,28 @@ impl LlvmCompiler {
             "assert",
             "nx_rt_assert_eq",
             "assert_eq",
+            "nx_rt_async_sleep",
+            "async_sleep",
+            "sleep",
+            "nx_rt_tcp_listen",
+            "tcp_listen",
+            "nx_rt_tcp_accept",
+            "tcp_accept",
+            "nx_rt_tcp_connect",
+            "tcp_connect",
+            "nx_rt_tcp_read_str",
+            "tcp_read",
+            "nx_rt_tcp_write_str",
+            "tcp_write",
+            "nx_rt_tcp_close",
+            "tcp_close",
+            "nx_rt_task_spawn",
+            "task_spawn",
+            "nx_rt_task_join",
+            "task_join",
+            "nx_rt_task_cancel",
+            "task_cancel",
+            "timeout",
         ]
         .into_iter()
         .collect();

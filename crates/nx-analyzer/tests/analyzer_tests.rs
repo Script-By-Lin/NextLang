@@ -1171,3 +1171,60 @@ var res: <INT32> = abs(-42);
         .iter()
         .any(|d| d.code.as_deref() == Some("NX-SYS-001")));
 }
+
+#[test]
+fn test_phase10_valid_async_await() {
+    let src = r#"
+async fn compute_value(x: <INT32>): <INT32> {
+    return x * 2;
+}
+
+async fn run(): <INT32> {
+    var fut: <FUTURE<INT32>> = compute_value(21);
+    var res: <INT32> = await fut;
+    return res;
+}
+"#;
+    let mut bag = DiagnosticBag::new();
+    let _ = analyze_source(src, &mut bag);
+    assert!(!bag.has_errors(), "diagnostics: {:?}", bag.diagnostics());
+}
+
+#[test]
+fn test_phase10_error_cannot_await_non_future() {
+    let src = r#"
+async fn run(): <VOID> {
+    var n: <INT32> = 42;
+    var x: <INT32> = await n;
+}
+"#;
+    let mut bag = DiagnosticBag::new();
+    let _ = analyze_source(src, &mut bag);
+    assert!(bag.has_errors());
+    assert!(bag
+        .diagnostics()
+        .iter()
+        .any(|d| d.message.contains("cannot await non-future type 'INT32'")));
+}
+
+#[test]
+fn test_phase10_error_await_with_active_mutable_borrow() {
+    let src = r#"
+async fn get_num(): <INT32> {
+    return 10;
+}
+
+async fn run(): <VOID> {
+    var val: <INT32> = 5;
+    var b_mut: <&mut INT32> = &mut val;
+    var res: <INT32> = await get_num();
+}
+"#;
+    let mut bag = DiagnosticBag::new();
+    let _ = analyze_source(src, &mut bag);
+    assert!(bag.has_errors());
+    assert!(bag
+        .diagnostics()
+        .iter()
+        .any(|d| d.code.as_deref() == Some("NX-OWN-004")));
+}

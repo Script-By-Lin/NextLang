@@ -357,6 +357,11 @@ pub enum Expr {
         fields: Vec<(Ident, Expr)>,
         span: Span,
     },
+    // Phase 10: Asynchronous await expression: `await <expr>`
+    Await {
+        expr: Box<Expr>,
+        span: Span,
+    },
 }
 
 impl Expr {
@@ -377,6 +382,7 @@ impl Expr {
             Expr::Alloc { span, .. } => *span,
             Expr::Free { span, .. } => *span,
             Expr::StructLiteral { span, .. } => *span,
+            Expr::Await { span, .. } => *span,
         }
     }
 }
@@ -432,13 +438,14 @@ pub struct UpdateStmt {
     pub span: Span,
 }
 
-/// Function declaration: `fn name(params):<RetType> { body }`
+/// Function declaration: `fn name(params):<RetType> { body }` or `async fn ...`
 #[derive(Debug, Clone, PartialEq)]
 pub struct FunctionDecl {
     pub name: Ident,
     pub params: Vec<Param>,
     pub return_type: Option<Type>,
     pub body: Block,
+    pub is_async: bool,
     pub span: Span,
 }
 
@@ -525,6 +532,7 @@ pub struct MethodDecl {
     pub is_static: bool,
     pub is_abstract: bool,
     pub is_final: bool,
+    pub is_async: bool,
     pub function: FunctionDecl,
     pub span: Span,
 }
@@ -1317,6 +1325,12 @@ impl AstFormatter {
                     self.format_expr(fval);
                     self.dedent();
                 }
+                self.dedent();
+            }
+            Expr::Await { expr, span } => {
+                self.line(&format!("Await [{}]", span));
+                self.indent();
+                self.format_expr(expr);
                 self.dedent();
             }
         }

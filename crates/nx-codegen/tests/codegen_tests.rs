@@ -336,3 +336,22 @@ vout("Got env:", got);
     assert!(stdout.contains("Set env: true"));
     assert!(stdout.contains("Got env: LLVM_NATIVE_OK"));
 }
+
+#[test]
+fn test_native_phase10_async_await() {
+    let src = r#"
+async fn compute_async(x:<INT32>):<INT32> {
+    await sleep(5);
+    return x * 3;
+}
+
+async fn main() {
+    var fut:<FUTURE<INT32>> = compute_async(14);
+    var res:<INT32> = await fut;
+    vout("Native async result:", res);
+}
+"#;
+    let (stdout, stderr, success) = compile_and_run(src, None);
+    assert!(success, "stderr: {}", stderr);
+    assert!(stdout.contains("Native async result: 42"));
+}

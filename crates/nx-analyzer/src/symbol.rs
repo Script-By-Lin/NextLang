@@ -11,6 +11,7 @@ pub enum SymbolKind {
     Function {
         param_types: Vec<SemType>,
         return_type: SemType,
+        is_async: bool,
     },
     ExternFunction {
         param_types: Vec<SemType>,
@@ -200,6 +201,19 @@ impl SymbolTable {
             ("json_stringify", SemType::String),
             ("assert", SemType::Void),
             ("assert_eq", SemType::Void),
+            // Phase 10: Asynchronous Runtime Builtins
+            ("async_sleep", SemType::Future(Box::new(SemType::Void))),
+            ("sleep", SemType::Future(Box::new(SemType::Void))),
+            ("tcp_listen", SemType::Future(Box::new(SemType::Int64))),
+            ("tcp_accept", SemType::Future(Box::new(SemType::Int64))),
+            ("tcp_connect", SemType::Future(Box::new(SemType::Int64))),
+            ("tcp_read", SemType::Future(Box::new(SemType::String))),
+            ("tcp_write", SemType::Future(Box::new(SemType::Int64))),
+            ("tcp_close", SemType::Void),
+            ("task_spawn", SemType::Any),
+            ("task_join", SemType::Future(Box::new(SemType::Any))),
+            ("task_cancel", SemType::Bool),
+            ("timeout", SemType::Future(Box::new(SemType::Any))),
         ];
 
         for (bname, bty) in sys_builtins {

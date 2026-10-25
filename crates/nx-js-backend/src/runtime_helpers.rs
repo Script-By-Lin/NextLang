@@ -167,6 +167,48 @@ function assert(cond, msg) {
 function assert_eq(a, b, msg) {
     if (a !== b) throw new Error("Assertion Failed" + (msg ? ": " + msg : "") + ": expected '" + b + "', got '" + a + "'");
 }
+
+// Phase 10 Asynchronous Runtime Helpers
+function async_sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, Math.max(0, ms || 0)));
+}
+function sleep(ms) {
+    return async_sleep(ms);
+}
+function task_spawn(fut) {
+    return Promise.resolve(fut);
+}
+function task_join(task) {
+    return Promise.resolve(task);
+}
+function task_cancel(task) {
+    return false;
+}
+function timeout(ms, fut) {
+    return Promise.race([
+        Promise.resolve(fut),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("operation timed out")), ms))
+    ]);
+}
+let __nx_next_sock_id = 1;
+function tcp_listen(addr) {
+    return Promise.resolve(__nx_next_sock_id++);
+}
+function tcp_accept(id) {
+    return Promise.resolve(__nx_next_sock_id++);
+}
+function tcp_connect(addr) {
+    return Promise.resolve(__nx_next_sock_id++);
+}
+function tcp_read(id, max_len) {
+    return Promise.resolve("");
+}
+function tcp_write(id, data) {
+    return Promise.resolve(String(data).length);
+}
+function tcp_close(id) {
+    return undefined;
+}
 "#,
     );
 

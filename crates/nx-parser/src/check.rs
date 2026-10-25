@@ -34,6 +34,7 @@ pub struct Symbol {
 pub struct ScopeChecker<'a> {
     scopes: Vec<HashMap<String, Symbol>>,
     diagnostics: &'a mut DiagnosticBag,
+    pub in_async_fn: bool,
 }
 
 impl<'a> ScopeChecker<'a> {
@@ -96,6 +97,19 @@ impl<'a> ScopeChecker<'a> {
             "json_stringify",
             "assert",
             "assert_eq",
+            // Phase 10: Async/Await runtime builtins
+            "async_sleep",
+            "sleep",
+            "tcp_listen",
+            "tcp_accept",
+            "tcp_connect",
+            "tcp_read",
+            "tcp_write",
+            "tcp_close",
+            "task_spawn",
+            "task_join",
+            "task_cancel",
+            "timeout",
         ] {
             root_scope.insert(
                 builtin.to_string(),
@@ -110,6 +124,7 @@ impl<'a> ScopeChecker<'a> {
         Self {
             scopes: vec![root_scope],
             diagnostics,
+            in_async_fn: false,
         }
     }
 
@@ -183,6 +198,8 @@ impl<'a> ScopeChecker<'a> {
                     span: f.name.span,
                 });
                 self.push_scope();
+                let prev_async = self.in_async_fn;
+                self.in_async_fn = f.is_async;
                 for param in &f.params {
                     self.insert_symbol(Symbol {
                         name: param.name.name.clone(),
@@ -193,6 +210,7 @@ impl<'a> ScopeChecker<'a> {
                 for s in &f.body.statements {
                     self.check_stmt(s);
                 }
+                self.in_async_fn = prev_async;
                 self.pop_scope();
             }
             Stmt::Return(ret) => {
@@ -277,9 +295,12 @@ impl<'a> ScopeChecker<'a> {
                                     span: param.name.span,
                                 });
                             }
+                            let prev_async = self.in_async_fn;
+                            self.in_async_fn = m.is_async || m.function.is_async;
                             for s in &m.function.body.statements {
                                 self.check_stmt(s);
                             }
+                            self.in_async_fn = prev_async;
                             self.pop_scope();
                         }
                     }
@@ -504,6 +525,16 @@ impl<'a> ScopeChecker<'a> {
                 for (_, val) in fields {
                     self.check_expr(val);
                 }
+            }
+            Expr::Await { expr, span } => {
+                if !self.in_async_fn {
+                    self.diagnostics.error_with_help(
+                        *span,
+                        "await is only permitted inside async functions",
+                        "mark the enclosing function with 'async fn'",
+                    );
+                }
+                self.check_expr(expr);
             }
         }
     }

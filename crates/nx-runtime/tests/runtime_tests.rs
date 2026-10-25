@@ -396,3 +396,94 @@ test "assert works" {
     assert!(out.contains("b64: aGVsbG8="));
     assert!(out.contains("time valid: true"));
 }
+
+#[test]
+fn test_phase10_async_function_and_await() {
+    let src = r#"
+async fn compute(a:<INT32>, b:<INT32>):<INT32> {
+    await sleep(5);
+    return a * b;
+}
+
+async fn main():<VOID> {
+    var fut:<FUTURE<INT32>> = compute(6, 7);
+    var res:<INT32> = await fut;
+    vout("async compute:", res);
+}
+"#;
+    let (res, out) = run_nx(src);
+    assert!(res.is_ok(), "runtime error: {:?}", res.err());
+    assert!(out.contains("async compute: 42"));
+}
+
+#[test]
+fn test_phase10_async_sleep_concurrency() {
+    let src = r#"
+async fn main():<VOID> {
+    var t1:<FUTURE<VOID>> = async_sleep(10);
+    var t2:<FUTURE<VOID>> = async_sleep(10);
+    await t1;
+    await t2;
+    vout("concurrent sleeps finished");
+}
+"#;
+    let (res, out) = run_nx(src);
+    assert!(res.is_ok(), "runtime error: {:?}", res.err());
+    assert!(out.contains("concurrent sleeps finished"));
+}
+
+#[test]
+fn test_phase10_task_spawn_and_join() {
+    let src = r#"
+async fn work(val:<STRING>):<STRING> {
+    await sleep(5);
+    return "done:" + val;
+}
+
+async fn main():<VOID> {
+    var task:<FUTURE<STRING>> = task_spawn(work("task1"));
+    var res:<STRING> = task_join(task);
+    vout("result:", res);
+}
+"#;
+    let (res, out) = run_nx(src);
+    assert!(res.is_ok(), "runtime error: {:?}", res.err());
+    assert!(out.contains("result: done:task1"));
+}
+
+#[test]
+fn test_phase10_task_cancel_and_timeout() {
+    let src = r#"
+async fn main():<VOID> {
+    var long_task:<FUTURE<VOID>> = async_sleep(5000);
+    var cancelled:<BOOL> = task_cancel(long_task);
+    vout("cancelled:", cancelled);
+
+    var fast_task:<FUTURE<VOID>> = async_sleep(5);
+    var timed:<FUTURE<VOID>> = timeout(500, fast_task);
+    await timed;
+    vout("timeout completed successfully");
+}
+"#;
+    let (res, out) = run_nx(src);
+    assert!(res.is_ok(), "runtime error: {:?}", res.err());
+    assert!(out.contains("cancelled: true"));
+    assert!(out.contains("timeout completed successfully"));
+}
+
+#[test]
+fn test_phase10_tcp_loopback() {
+    let src = r#"
+async fn main():<VOID> {
+    var server_fut:<FUTURE<INT64>> = tcp_listen("127.0.0.1:0");
+    var server_fd:<INT64> = await server_fut;
+    vout("server fd ready:", server_fd > 0);
+    tcp_close(server_fd);
+    vout("tcp loopback closed");
+}
+"#;
+    let (res, out) = run_nx(src);
+    assert!(res.is_ok(), "runtime error: {:?}", res.err());
+    assert!(out.contains("server fd ready: true"));
+    assert!(out.contains("tcp loopback closed"));
+}

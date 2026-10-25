@@ -92,10 +92,12 @@ impl SourceFormatter {
                     .iter()
                     .map(|p| format!("{}:<{}>", p.name.name, p.type_annotation))
                     .collect();
+                let async_prefix = if f.is_async { "async " } else { "" };
                 let _ = writeln!(
                     self.output,
-                    "{}fn {}({}){} {{",
+                    "{}{}fn {}({}){} {{",
                     ind,
+                    async_prefix,
                     f.name.name,
                     params.join(", "),
                     ret
@@ -253,6 +255,11 @@ impl SourceFormatter {
                             let stat = if m.is_static { "static " } else { "" };
                             let abst = if m.is_abstract { "abstract " } else { "" };
                             let fin = if m.is_final { "final " } else { "" };
+                            let asyn = if m.is_async || m.function.is_async {
+                                "async "
+                            } else {
+                                ""
+                            };
                             let ret = match &m.function.return_type {
                                 Some(t) => format!(":<{}>", t),
                                 None => ":<VOID>".to_string(),
@@ -266,12 +273,13 @@ impl SourceFormatter {
                             if m.is_abstract {
                                 let _ = writeln!(
                                     self.output,
-                                    "{}{} {}{}{}fn {}({}){};",
+                                    "{}{} {}{}{}{}fn {}({}){};",
                                     self.indent_str(),
                                     m.access,
                                     stat,
                                     abst,
                                     fin,
+                                    asyn,
                                     m.function.name.name,
                                     params.join(", "),
                                     ret
@@ -279,12 +287,13 @@ impl SourceFormatter {
                             } else {
                                 let _ = writeln!(
                                     self.output,
-                                    "{}{} {}{}{}fn {}({}){} {{",
+                                    "{}{} {}{}{}{}fn {}({}){} {{",
                                     self.indent_str(),
                                     m.access,
                                     stat,
                                     abst,
                                     fin,
+                                    asyn,
                                     m.function.name.name,
                                     params.join(", "),
                                     ret
@@ -538,6 +547,9 @@ impl SourceFormatter {
                     .map(|(k, v)| format!("{}: {}", k.name, self.format_expr(v)))
                     .collect();
                 format!("{} {{ {} }}", name.name, field_strs.join(", "))
+            }
+            Expr::Await { expr, .. } => {
+                format!("await {}", self.format_expr(expr))
             }
         }
     }

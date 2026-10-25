@@ -446,3 +446,81 @@ var x:<FL64> = sqrt(25.0);
 
     let _ = std::fs::remove_dir_all(&tmp_dir);
 }
+
+#[test]
+fn test_phase10_async_await_parsing() {
+    let src = r#"
+async fn fetch_data(url:<STRING>):<STRING> {
+    var response:<STRING> = await request(url);
+    return response;
+}
+
+class ApiService {
+    public async fn load():<STRING> {
+        return await fetch_data("https://example.com");
+    }
+}
+
+async fn main():<VOID> {
+    var svc:<ApiService> = ApiService();
+    var res:<STRING> = await svc.load();
+    vout(res);
+}
+"#;
+    let mut bag = DiagnosticBag::new();
+    let prog = parse_source(src, &mut bag);
+    assert!(!bag.has_errors());
+    assert_eq!(prog.statements.len(), 3);
+
+    // Verify async function
+    match &prog.statements[0] {
+        Stmt::FunctionDecl(f) => {
+            assert!(f.is_async);
+            assert_eq!(f.name.name, "fetch_data");
+            assert_eq!(f.params.len(), 1);
+            // Verify await expression in body
+            match &f.body.statements[0] {
+                Stmt::VarDecl(decl) => match decl.initializer.as_ref().unwrap() {
+                    Expr::Await { expr, .. } => match expr.as_ref() {
+                        Expr::Call { callee, .. } => match callee.as_ref() {
+                            Expr::Identifier(id) => assert_eq!(id.name, "request"),
+                            _ => panic!("expected request identifier"),
+                        },
+                        _ => panic!("expected call expr inside await"),
+                    },
+                    _ => panic!("expected await in var decl initializer"),
+                },
+                _ => panic!("expected var decl"),
+            }
+        }
+        _ => panic!("expected FunctionDecl"),
+    }
+
+    // Verify class async method
+    match &prog.statements[1] {
+        Stmt::ClassDecl(c) => match &c.members[0] {
+            ClassMember::Method(m) => {
+                assert!(m.is_async);
+                assert!(m.function.is_async);
+                assert_eq!(m.function.name.name, "load");
+            }
+            _ => panic!("expected Method"),
+        },
+        _ => panic!("expected ClassDecl"),
+    }
+}
+
+#[test]
+fn test_phase10_await_outside_async_rejected() {
+    let src = r#"
+fn sync_fn():<VOID> {
+    var x:<INT32> = await calculate();
+}
+"#;
+    let mut bag = DiagnosticBag::new();
+    let _ = nx_parser::check_source(src, &mut bag);
+    assert!(bag.has_errors());
+    assert!(bag.diagnostics().iter().any(|d| d
+        .message
+        .contains("await is only permitted inside async functions")));
+}
