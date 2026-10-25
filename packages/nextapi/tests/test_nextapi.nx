@@ -129,7 +129,7 @@ test "Milestone D: Interactive Swagger UI testing interface" {
     var res: Response = client.get("/docs");
     assert(res.status == 200, "GET /docs should return 200 OK");
     assert(str_contains(res.body, "swagger-ui"), "Must link to swagger-ui style sheet");
-    assert(str_contains(res.body, "Execute Real Request"), "Must provide interactive execution button");
+    assert(str_contains(res.body, "SwaggerUIBundle"), "Must initialize SwaggerUIBundle");
 }
 
 test "Milestone D: ReDoc documentation endpoint" {

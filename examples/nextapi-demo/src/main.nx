@@ -7,19 +7,34 @@ async fn main() -> Void {
     var app: NextAPI = NextAPI("NextAPI Showcase API", "1.0.0", "Interactive Async REST API built with NextLang");
 
     // Root Welcome Endpoint
-    app.get("/", "Root Welcome", "Welcome message and API index", "general");
+    app.get("/", "Root", "API root welcome route", "default");
 
     // Modular API Router for /api/v1
     var v1: Router = Router("/api/v1");
-    v1.get("/health", "Health Status", "Returns operational health and uptime", "system");
-    v1.get("/users", "List Users", "Returns collection of registered users", "users");
-    v1.get("/users/{id}", "Get User", "Returns individual user details by typed ID", "users");
+
+    // Users
+    v1.get("/users", "Read Users", "Returns collection of registered users", "users");
+    v1.get("/users/me", "Read User Me", "Returns authenticated current user profile", "users");
+    v1.get("/users/{id}", "Read User", "Returns individual user details by typed ID", "users");
     v1.post("/users", "Create User", "Creates a new user with JSON payload validation", "users");
     v1.delete("/users/{id}", "Delete User", "Removes a user by ID", "users");
 
-    // Register custom response for health check
+    // Items
+    v1.get("/items", "Read Items", "Returns collection of store items", "items");
+    v1.get("/items/{id}", "Read Item", "Returns single item by id", "items");
+    v1.put("/items/{id}", "Update Item", "Updates an item payload", "items");
+
+    // Admin
+    v1.post("/admin", "Update Admin", "Triggers administrative tasks", "admin");
+
+    // System
+    v1.get("/health", "Health Status", "Returns operational health and uptime", "system");
+
+    // Register custom mock responses
     app.set_response("GET", "/api/v1/health", 200, "{\"status\":\"healthy\",\"service\":\"nextapi-demo\",\"version\":\"1.0.0\"}");
     app.set_response("GET", "/api/v1/users", 200, "{\"users\":[{\"id\":1,\"name\":\"Alice\"},{\"id\":2,\"name\":\"Bob\"}]}");
+    app.set_response("GET", "/api/v1/users/me", 200, "{\"id\":100,\"username\":\"admin\",\"role\":\"superuser\"}");
+    app.set_response("GET", "/api/v1/items", 200, "{\"items\":[{\"id\":101,\"name\":\"Keyboard\"},{\"id\":102,\"name\":\"Mouse\"}]}");
 
     // Mount modular router
     app.include_router(v1);
