@@ -107,6 +107,8 @@ test "Milestone D: Automatic OpenAPI 3.0.3 specification generator" {
     assert(str_contains(res.body, "/products"), "Must list /products path");
     assert(str_contains(res.body, "/products/{id}"), "Must list /products/{id} path");
     assert(validate_json(res.body), "OpenAPI JSON must be valid JSON");
+    assert(not str_contains(res.body, "Malformed request syntax"), "Must not include 400 boilerplate");
+    assert(not str_contains(res.body, "Internal server error"), "Must not include 500 boilerplate");
 }
 
 test "Milestone D: OpenAPI specification JSON is strictly valid with interleaved methods per path" {
@@ -130,6 +132,8 @@ test "Milestone D: Interactive Swagger UI testing interface" {
     assert(res.status == 200, "GET /docs should return 200 OK");
     assert(str_contains(res.body, "swagger-ui"), "Must link to swagger-ui style sheet");
     assert(str_contains(res.body, "SwaggerUIBundle"), "Must initialize SwaggerUIBundle");
+    assert(str_contains(res.body, "E6725B"), "Must apply NextLang brand coral color #E6725B");
+    assert(str_contains(res.body, "next-navbar"), "Must include NextLang brand topbar");
 }
 
 test "Milestone D: ReDoc documentation endpoint" {
@@ -138,6 +142,16 @@ test "Milestone D: ReDoc documentation endpoint" {
     var res: Response = client.get("/redoc");
     assert(res.status == 200, "GET /redoc should return 200 OK");
     assert(str_contains(res.body, "<redoc spec-url="), "Must contain redoc custom web component");
+    assert(str_contains(res.body, "E6725B"), "Must apply NextLang brand coral theme to ReDoc");
+}
+
+test "Milestone D: NextLang brand asset serving" {
+    var app: NextAPI = NextAPI.create();
+    var client: TestClient = TestClient(app);
+    var res: Response = client.get("/assets/nextlang.svg");
+    assert(res.status == 200, "GET /assets/nextlang.svg should return 200");
+    assert(str_contains(res.content_type, "svg"), "Must have svg content-type");
+    assert(str_contains(res.body, "<svg"), "Must return valid SVG markup");
 }
 
 test "Milestone D: Disabled documentation returns 404" {

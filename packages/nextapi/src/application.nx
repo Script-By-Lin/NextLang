@@ -198,6 +198,25 @@ class NextAPI {
                 var redoc_res: Response = Response.html(redoc_html, 200);
                 return process_post_request(req, redoc_res, self.middleware, start_time);
             }
+            if (req.method == "GET") & ((req.path == "/assets/nextlang.svg") | (req.path == "/favicon.ico")) {
+                if file_exists("assets/nextlang.svg") {
+                    var svg_f: String = file_read_all("assets/nextlang.svg");
+                    var svg_res1: Response = Response(200, "image/svg+xml", svg_f);
+                    return process_post_request(req, svg_res1, self.middleware, start_time);
+                } otherwise file_exists("../assets/nextlang.svg") {
+                    var svg_f2: String = file_read_all("../assets/nextlang.svg");
+                    var svg_res2: Response = Response(200, "image/svg+xml", svg_f2);
+                    return process_post_request(req, svg_res2, self.middleware, start_time);
+                } otherwise file_exists("../../assets/nextlang.svg") {
+                    var svg_f3: String = file_read_all("../../assets/nextlang.svg");
+                    var svg_res3: Response = Response(200, "image/svg+xml", svg_f3);
+                    return process_post_request(req, svg_res3, self.middleware, start_time);
+                } else {
+                    var default_svg: String = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 128 128\"><rect width=\"128\" height=\"128\" rx=\"28\" fill=\"#161C2D\"/><path d=\"M32 96V32L96 96V32\" stroke=\"#E6725B\" stroke-width=\"14\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg>";
+                    var svg_fallback: Response = Response(200, "image/svg+xml", default_svg);
+                    return process_post_request(req, svg_fallback, self.middleware, start_time);
+                }
+            }
         } else {
             if (req.path == self.openapi_url) | (req.path == self.docs_url) | (req.path == self.redoc_url) {
                 var not_found_docs: Response = handle_404(req.path);
@@ -369,7 +388,15 @@ fn parse_response_wire(wire: String) -> Response {
             }
 
             var body: String = extract_raw_body(wire);
-            var res: Response = Response(status, "application/json", body);
+            var ct: String = "application/json";
+            if str_contains(header_text, "Content-Type: image/svg+xml") {
+                ct = "image/svg+xml";
+            } otherwise str_contains(header_text, "Content-Type: text/html") {
+                ct = "text/html";
+            } otherwise str_contains(header_text, "Content-Type: text/plain") {
+                ct = "text/plain";
+            }
+            var res: Response = Response(status, ct, body);
             res.custom_headers = header_text;
             return res;
         }
